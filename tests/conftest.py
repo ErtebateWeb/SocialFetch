@@ -1,0 +1,1 @@
+"""Pytest configuration for SocialFetch."""
