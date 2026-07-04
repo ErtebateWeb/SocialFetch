@@ -16,7 +16,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host ""
 Write-Host "--- mypy ---" -ForegroundColor Yellow
-mypy app/
+mypy socialfetch/
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host ""

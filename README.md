@@ -4,6 +4,8 @@ Open-source self-hosted Social Media Downloader Framework.
 
 ## Features (Planned)
 
+Status: 🚧 Under active development.
+
 - **Instagram** - Download posts, stories, reels, and profile media
 - **TikTok** - Download videos without watermark
 - **YouTube** - Download videos and audio
@@ -14,15 +16,16 @@ Open-source self-hosted Social Media Downloader Framework.
 
 ## Architecture
 
-```
-socialfetch/
-  core/          - Shared abstractions and interfaces
-  downloaders/   - Platform-specific download implementations
-  api/           - REST API layer
-  config/        - Application configuration
-```
+SocialFetch is designed as a modular Python application.
 
-Each social media platform is implemented as an independent downloader module that adheres to a common interface.
+The architecture will evolve incrementally during future sprints.
+
+See:
+
+- [planning/](planning/)
+- [ROADMAP.md](ROADMAP.md)
+
+for the current roadmap and architecture direction.
 
 ## Getting Started
 

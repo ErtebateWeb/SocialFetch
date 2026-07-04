@@ -13,7 +13,7 @@ black --check .
 
 echo ""
 echo "--- mypy ---"
-mypy app/
+mypy socialfetch/
 
 echo ""
 echo "==> All linters passed"

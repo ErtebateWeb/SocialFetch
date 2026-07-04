@@ -11,14 +11,14 @@
 
 Run the bootstrap script to set up everything automatically:
 
-#### Linux / macOS
+**Linux / macOS:**
 
 ```bash
 chmod +x scripts/bootstrap.sh
 ./scripts/bootstrap.sh
 ```
 
-#### Windows (PowerShell)
+**Windows:**
 
 ```powershell
 .\scripts\bootstrap.ps1
@@ -33,14 +33,13 @@ This will:
 
 ### Manual Setup
 
-#### Linux / macOS
-
 ```bash
 # Create virtual environment
-python3 -m venv .venv
+python -m venv .venv
 
 # Activate it
-source .venv/bin/activate
+source .venv/bin/activate        # Linux / macOS
+.venv\Scripts\activate           # Windows
 
 # Install package with dev dependencies
 pip install -e ".[dev]"
@@ -52,40 +51,19 @@ pre-commit install
 cp .env.example .env
 ```
 
-#### Windows (PowerShell)
-
-```powershell
-# Create virtual environment
-py -3.11 -m venv .venv
-
-# Activate it
-.venv\Scripts\Activate.ps1
-
-# Install package with dev dependencies
-pip install -e ".[dev]"
-
-# Install pre-commit hooks
-pre-commit install
-
-# Copy environment variables
-Copy-Item .env.example .env
-```
-
 ## Daily Commands
 
 ### Run Tests
 
-#### Linux / macOS
-
 ```bash
+# Linux / macOS
 ./scripts/test.sh
-./scripts/test.sh --coverage
-```
 
-#### Windows (PowerShell)
-
-```powershell
+# Windows
 .\scripts\test.ps1
+
+# With coverage
+./scripts/test.sh --coverage
 .\scripts\test.ps1 --coverage
 ```
 
@@ -98,15 +76,11 @@ pytest --cov --cov-report=term-missing
 
 ### Run Linters
 
-#### Linux / macOS
-
 ```bash
+# Linux / macOS
 ./scripts/lint.sh
-```
 
-#### Windows (PowerShell)
-
-```powershell
+# Windows
 .\scripts\lint.ps1
 ```
 
@@ -115,7 +89,7 @@ Or individually:
 ```bash
 ruff check .          # Lint
 black --check .       # Format check
-mypy socialfetch/     # Type check
+mypy app/             # Type check
 ```
 
 ### Auto-fix Issues
