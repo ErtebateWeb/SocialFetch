@@ -1,2 +1,5 @@
-def test_smoke() -> None:
-    assert 1 + 1 == 2
+import socialfetch
+
+
+def test_package_imports() -> None:
+    assert socialfetch is not None

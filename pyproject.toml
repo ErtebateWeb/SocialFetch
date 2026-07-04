@@ -48,7 +48,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["app"]
+packages = ["socialfetch"]
 
 [tool.ruff]
 target-version = "py311"
@@ -67,6 +67,9 @@ select = [
     "TCH",  # flake8-type-checking
 ]
 
+[tool.ruff.lint.isort]
+known-first-party = ["socialfetch"]
+
 [tool.black]
 target-version = ["py311"]
 line-length = 88
@@ -84,3 +87,16 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["socialfetch"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 0
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.",
+]
