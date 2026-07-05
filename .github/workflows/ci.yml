@@ -45,4 +45,4 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install mypy
-      - run: mypy app/
+      - run: mypy socialfetch/

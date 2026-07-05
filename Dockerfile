@@ -14,4 +14,4 @@ USER appuser
 
 EXPOSE 8000
 
-CMD ["python", "-m", "app"]
+CMD ["python", "-m", "socialfetch"]
