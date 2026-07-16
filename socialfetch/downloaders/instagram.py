@@ -1,6 +1,5 @@
 """Instagram downloader implementation."""
 
-import logging
 import os
 import shutil
 import tempfile
@@ -8,6 +7,7 @@ from pathlib import Path
 
 import yt_dlp
 
+from socialfetch.config.settings import settings
 from socialfetch.core.errors import DownloadError, InvalidURLError, MediaNotFoundError
 from socialfetch.core.interfaces import BaseDownloader
 from socialfetch.core.models import (
@@ -21,15 +21,14 @@ from socialfetch.downloaders.instagram_api import InstagramAPIDownloader
 from socialfetch.downloaders.instagram_photo import resolve_and_download_photos
 from socialfetch.downloaders.registry import DownloaderRegistry
 
-logger = logging.getLogger(__name__)
-
-# Default cookie file path
+# Path to Instagram cookies file
 COOKIE_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "instagram_cookies.txt",
 )
+
 # Default WARP SOCKS5 proxy
-WARP_PROXY = "socks5h://127.0.0.1:40000"
+WARP_PROXY: str | None = settings.proxy_url
 
 
 @DownloaderRegistry.register(
@@ -56,7 +55,7 @@ class InstagramDownloader(BaseDownloader):
         if self._api is None:
             self._api = InstagramAPIDownloader(
                 cookie_path=COOKIE_FILE,
-                proxy=WARP_PROXY,
+                proxy=WARP_PROXY or "",
             )
         return self._api
 

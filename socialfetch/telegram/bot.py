@@ -12,7 +12,9 @@ logger = logging.getLogger(__name__)
 
 
 def create_bot(token: str) -> Application:
-    base_url = "http://127.0.0.1:8081/bot"
+    from socialfetch.config.settings import settings
+
+    base_url = settings.telegram_api_url
     app = (
         Application.builder()
         .token(token)

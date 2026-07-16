@@ -10,6 +10,7 @@ from typing import Any, cast
 
 import yt_dlp
 
+from socialfetch.config.settings import settings
 from socialfetch.core.errors import DownloadError, InvalidURLError, MediaNotFoundError
 from socialfetch.core.interfaces import BaseDownloader
 from socialfetch.core.models import (
@@ -116,21 +117,19 @@ class YouTubeDownloader(BaseDownloader):
             "quiet": True,
             "no_warnings": True,
             "ignoreerrors": True,
-            "proxy": "socks5h://127.0.0.1:40000",
+            "proxy": settings.proxy_url or "",
             "merge_output_format": "mp4",
         }
 
-        # Auto-downgrade quality if file would exceed 50MB
-        if quality in ("best", "best+1080"):
-            # First peek at format sizes without downloading
-            peek_opts: dict[str, object] = {
-                "format": fmt,
-                "quiet": True,
-                "no_warnings": True,
-                "extract_flat": True,
-                "proxy": "socks5h://127.0.0.1:40000",
-            }
+        # Auto-downgrade quality if file would exceed 45MB
+        if quality == "best":
             try:
+                peek_opts: dict[str, object] = {
+                    "format": fmt,
+                    "quiet": True,
+                    "no_warnings": True,
+                    "proxy": settings.proxy_url or "",
+                }
                 with yt_dlp.YoutubeDL(peek_opts) as ydl:  # type: ignore[arg-type]
                     peek = ydl.extract_info(url, download=False)
                 if peek:

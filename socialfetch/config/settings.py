@@ -57,6 +57,14 @@ class Settings(BaseSettings):
     download: DownloadConfig = Field(default_factory=DownloadConfig)
     logging: LogConfig = Field(default_factory=LogConfig)
     instagram: InstagramConfig = Field(default_factory=InstagramConfig)
+    telegram_api_url: str = Field(
+        default="http://127.0.0.1:8081/bot",
+        description="Telegram Bot API base URL (local or remote)",
+    )
+    proxy_url: str | None = Field(
+        default="socks5h://127.0.0.1:40000",
+        description="SOCKS5 proxy URL for downloaders (WARP)",
+    )
 
 
 # Global singleton for easy import
