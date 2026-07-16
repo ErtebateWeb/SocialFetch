@@ -15,6 +15,7 @@ authors = [
 dependencies = [
     "yt-dlp>=2025.05.22",
     "pydantic-settings>=2.0",
+    "python-telegram-bot>=21.0",
 ]
 keywords = [
     "social-media",
@@ -43,6 +44,7 @@ dev = [
     "ruff>=0.3",
     "black>=24.2",
     "pre-commit>=3.6",
+    "pytest-asyncio>=0.21",
 ]
 
 [project.urls]
@@ -86,10 +88,11 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["yt_dlp", "socialfetch.downloaders.instagram", "socialfetch.config.settings"]
+module = ["yt_dlp", "socialfetch.downloaders.instagram", "socialfetch.config.settings", "telegram", "telegram.ext", "socialfetch.telegram", "socialfetch.telegram.handlers", "socialfetch.telegram.bot"]
 ignore_errors = true
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
