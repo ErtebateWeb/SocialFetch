@@ -14,6 +14,7 @@ authors = [
 ]
 dependencies = [
     "yt-dlp>=2025.05.22",
+    "pydantic-settings>=2.0",
 ]
 keywords = [
     "social-media",
@@ -85,7 +86,7 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["yt_dlp", "socialfetch.downloaders.instagram"]
+module = ["yt_dlp", "socialfetch.downloaders.instagram", "socialfetch.config.settings"]
 ignore_errors = true
 
 [tool.pytest.ini_options]
