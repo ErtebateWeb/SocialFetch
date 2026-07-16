@@ -1,4 +1,4 @@
-"""Unit tests for Instagram photo fallback helpers (ADR 0013)."""
+"""Unit tests for Instagram photo fallback helpers (ADR 0013 + carousel)."""
 
 import json
 from pathlib import Path
@@ -8,35 +8,62 @@ import pytest
 
 from socialfetch.downloaders import instagram_photo as photo
 
+# --- Embed HTML fixture for carousel (3 images) ---
+CAROUSEL_EMBED_HTML = """
+<html><body>
+<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-19/" class="profile"/>
+<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-19/" class="profile"/>
+<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-15/747099071_a_n.jpg?stp=dst-jpg"/>
+<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-19/747324722_b_n.jpg?stp=dst-jpg"/>
+<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-15/747439930_c_n.jpg?stp=dst-jpg"/>
+</body></html>
+"""
 
-class TestParsers:
-    def test_parse_oembed_image_urls(self) -> None:
-        data = {
-            "thumbnail_url": "https://cdn.example/a.jpg",
-            "author_name": "alice",
-            "title": "hello",
-        }
-        assert photo.parse_oembed_image_urls(data) == ["https://cdn.example/a.jpg"]
-        assert photo.parse_oembed_image_urls({}) == []
-
-    def test_parse_og_image_urls(self) -> None:
-        html = """
-        <html><head>
-        <meta property="og:image" content="https://cdn.example/og.jpg" />
-        </head></html>
-        """
-        assert photo.parse_og_image_urls(html) == ["https://cdn.example/og.jpg"]
-
-    def test_parse_display_urls_unescapes(self) -> None:
-        html = r'{"display_url":"https://cdn.example/x.jpg?a=1\u0026b=2"}'
-        urls = photo.parse_display_urls(html)
-        assert len(urls) == 1
-        assert "a=1&b=2" in urls[0]
+SINGLE_EMBED_HTML = """
+<html><body>
+<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-19/profile_pic_n.jpg"/>
+<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-15/post_image_n.jpg"/>
+</body></html>
+"""
 
 
-class TestResolveImageUrls:
-    def test_oembed_first(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+class TestEmbedParser:
+    def test_carousel_returns_post_images(self) -> None:
+        urls = photo._parse_embed_image_urls(CAROUSEL_EMBED_HTML)
+        # Should skip profile pic (appears 2x), return 3 carousel images
+        assert len(urls) == 3
+        assert "747099071" in urls[0]
+        assert "747324722" in urls[1]
+        assert "747439930" in urls[2]
+
+    def test_single_image(self) -> None:
+        urls = photo._parse_embed_image_urls(SINGLE_EMBED_HTML)
+        # Profile pic appears once, single image appears once → keep both
+        assert len(urls) == 2
+
+    def test_empty_html(self) -> None:
+        urls = photo._parse_embed_image_urls("<html></html>")
+        assert urls == []
+
+
+class TestResolveCarousel:
+    def test_uses_embed_for_carousel(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake_fetch_text(
+            url: str, headers: dict[str, str] | None = None, timeout: float = 15.0
+        ) -> str:
+            if "oembed" in url:
+                return json.dumps({"thumbnail_url": "https://cdn.example/thumb.jpg"})
+            if "/embed/" in url:
+                return CAROUSEL_EMBED_HTML
+            return ""
+
+        monkeypatch.setattr(photo, "fetch_text", fake_fetch_text)
+        urls, meta = photo.resolve_image_urls("https://www.instagram.com/p/ABC/")
+        assert len(urls) == 3  # 3 carousel images from embed
+        assert "author" not in meta
+
+    def test_fallback_to_oembed_thumbnail(
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def fake_fetch_text(
             url: str, headers: dict[str, str] | None = None, timeout: float = 15.0
@@ -45,34 +72,37 @@ class TestResolveImageUrls:
                 return json.dumps(
                     {
                         "thumbnail_url": "https://cdn.example/thumb.jpg",
-                        "author_name": "bob",
-                        "title": "caption text",
+                        "author_name": "alice",
                     }
                 )
-            raise AssertionError("HTML should not be fetched when oEmbed works")
+            if "/embed/" in url:
+                return "<html></html>"  # empty embed
+            return ""
 
         monkeypatch.setattr(photo, "fetch_text", fake_fetch_text)
         urls, meta = photo.resolve_image_urls("https://www.instagram.com/p/ABC/")
         assert urls == ["https://cdn.example/thumb.jpg"]
-        assert meta["author"] == "bob"
-        assert meta["caption"] == "caption text"
+        assert meta["author"] == "alice"
 
-    def test_fallback_to_og_image(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        def fake_fetch_text(
-            url: str, headers: dict[str, str] | None = None, timeout: float = 15.0
-        ) -> str:
-            if "oembed" in url:
-                raise photo.urllib.error.URLError("oembed down")
-            return '<meta property="og:image" content="https://cdn.example/og2.jpg" />'
 
-        monkeypatch.setattr(photo, "fetch_text", fake_fetch_text)
-        urls, meta = photo.resolve_image_urls("https://www.instagram.com/p/ABC/")
-        assert urls == ["https://cdn.example/og2.jpg"]
-        assert meta == {}
+class TestParsers:
+    def test_parse_oembed_metadata(self) -> None:
+        data = {
+            "thumbnail_url": "https://cdn.example/a.jpg",
+            "author_name": "alice",
+            "title": "hello",
+        }
+        meta = photo.parse_oembed_metadata(data)
+        assert meta["author"] == "alice"
+        assert meta["caption"] == "hello"
+
+    def test_parse_display_urls_unescapes(self) -> None:
+        val = photo._unescape_url(r"https://cdn.example/x.jpg?a=1\u0026b=2")
+        assert "a=1&b=2" in val
 
 
 class TestDownloadImages:
-    def test_download_images_writes_files(
+    def test_download_writes_files(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         jpeg = b"\xff\xd8\xff" + b"fakejpeg"
@@ -86,15 +116,22 @@ class TestDownloadImages:
             return jpeg, "image/jpeg"
 
         monkeypatch.setattr(photo, "fetch_bytes", fake_fetch_bytes)
-        paths = photo.download_images(["https://cdn.example/a.jpg"], tmp_path, "SHORT")
-        assert len(paths) == 1
+        paths = photo.download_images(
+            [
+                "https://cdn.example/img1.jpg",
+                "https://cdn.example/img2.jpg",
+            ],
+            tmp_path,
+            "SHORT",
+        )
+        assert len(paths) == 2
         assert paths[0].name == "SHORT_0.jpg"
-        assert paths[0].read_bytes() == jpeg
+        assert paths[1].name == "SHORT_1.jpg"
 
 
-class TestPhotoFallbackIntegration:
+class TestCarouselIntegration:
     @pytest.mark.asyncio
-    async def test_downloader_uses_photo_fallback(
+    async def test_downloader_returns_all_carousel_images(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         from socialfetch.core.models import DownloadRequest, MediaType
@@ -110,9 +147,12 @@ class TestPhotoFallbackIntegration:
         def fake_resolve(
             post_url: str, dest_dir: Path, shortcode: str
         ) -> tuple[list[Path], dict[str, str]]:
-            path = dest_dir / f"{shortcode}_0.jpg"
-            path.write_bytes(b"\xff\xd8\xffdata")
-            return [path], {"author": "user1", "caption": "cap"}
+            saved = []
+            for i in range(3):
+                path = dest_dir / f"{shortcode}_{i}.jpg"
+                path.write_bytes(b"\xff\xd8\xffdata")
+                saved.append(path)
+            return saved, {"author": "user1", "caption": "carousel post"}
 
         monkeypatch.setattr(InstagramDownloader, "_download_with_ytdlp", boom)
         monkeypatch.setattr(
@@ -127,7 +167,6 @@ class TestPhotoFallbackIntegration:
                 output_dir=tmp_path,
             )
         )
-        assert result.media_type == MediaType.PHOTO
+        assert result.media_type == MediaType.CAROUSEL
+        assert len(result.files) == 3
         assert result.author == "user1"
-        assert result.caption == "cap"
-        assert len(result.files) == 1

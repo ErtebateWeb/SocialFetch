@@ -1,7 +1,7 @@
 """Instagram photo fallback helpers (no yt-dlp).
 
-Implements ADR 0013: resolve public image URLs via oEmbed / og:image /
-display_url scrape, then download bytes with stdlib urllib.
+Implements ADR 0013 + carousel support: resolve public image URLs via
+oEmbed (metadata) + embed page (image URLs), then download with stdlib urllib.
 """
 
 import contextlib
@@ -64,47 +64,142 @@ def fetch_bytes(
         return body, content_type
 
 
-def parse_oembed_image_urls(oembed_json: dict[str, object]) -> list[str]:
-    """Extract image URLs from an Instagram oEmbed payload."""
+def parse_oembed_metadata(oembed_json: dict[str, object]) -> dict[str, str]:
+    """Extract metadata from Instagram oEmbed payload."""
+    meta: dict[str, str] = {}
+    author = oembed_json.get("author_name")
+    title = oembed_json.get("title")
+    if isinstance(author, str) and author:
+        meta["author"] = author
+    if isinstance(title, str) and title:
+        meta["caption"] = title
+    return meta
+
+
+def _file_id_from_url(url: str) -> str:
+    """Extract the unique file identifier from a CDN URL."""
+    m = re.search(r"/(\d{6,}_[^/]+?)_n\.jpg", url)
+    return m.group(1) if m else url
+
+
+def _parse_embed_image_urls(html: str) -> list[str]:
+    """Extract unique post image URLs from Instagram embed HTML.
+
+    Strategy: collect all CDN scontent URLs, deduplicate by file ID,
+    then skip the first one if it appears >1 time (profile pic).
+    Returns deduplicated image URLs in order.
+    """
+    all_imgs = re.findall(r'(https://scontent[^"\\]+\.jpg)', html)
+    if not all_imgs:
+        return []
+
+    # Deduplicate by file ID, keeping first occurrence URL
+    seen: dict[str, str] = {}
+    for img in all_imgs:
+        fid = _file_id_from_url(img)
+        if fid not in seen:
+            seen[fid] = img
+
+    file_ids = list(seen.keys())
+
+    # Count occurrences to detect profile pic (appears >1 time)
+    # If there are multiple images, skip the first if it's repeated
+    if len(file_ids) > 1:
+        first_count = sum(
+            1 for img in all_imgs if _file_id_from_url(img) == file_ids[0]
+        )
+        if first_count > 1:
+            # First image is likely profile pic — skip it
+            file_ids = file_ids[1:]
+
+    return [seen[fid] for fid in file_ids]
+
+
+def resolve_image_urls(post_url: str) -> tuple[list[str], dict[str, str]]:
+    """Resolve all image URLs for a post (including carousel).
+
+    Order:
+    1. Embed page (all carousel images)
+    2. oEmbed thumbnail (single-image fallback)
+    3. og:image / display_url (last resort)
+
+    Returns (urls, metadata).
+    """
+    metadata: dict[str, str] = {}
     urls: list[str] = []
-    thumb = oembed_json.get("thumbnail_url")
-    if isinstance(thumb, str) and thumb.strip():
-        urls.append(thumb.strip())
-    return urls
 
+    # 1) oEmbed for metadata + fallback thumbnail
+    oembed_url = "https://www.instagram.com/api/v1/oembed/?url=" + urllib.parse.quote(
+        post_url, safe=""
+    )
+    oembed_thumb = ""
+    try:
+        body = fetch_text(oembed_url, headers={"Accept": "application/json"})
+        data = json.loads(body)
+        if isinstance(data, dict):
+            metadata.update(parse_oembed_metadata(data))
+            thumb = data.get("thumbnail_url")
+            if isinstance(thumb, str) and thumb.strip():
+                oembed_thumb = thumb.strip()
+    except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        TimeoutError,
+        json.JSONDecodeError,
+        OSError,
+    ) as exc:
+        logger.debug("oEmbed failed for %s: %s", post_url, exc)
 
-def parse_og_image_urls(html: str) -> list[str]:
-    """Extract og:image meta content values from HTML."""
-    patterns = [
-        r'property=["\']og:image["\']\s+content=["\']([^"\']+)["\']',
-        r'content=["\']([^"\']+)["\']\s+property=["\']og:image["\']',
-        r'name=["\']og:image["\']\s+content=["\']([^"\']+)["\']',
-    ]
-    found: list[str] = []
-    for pattern in patterns:
-        for match in re.finditer(pattern, html, flags=re.IGNORECASE):
-            value = match.group(1).strip()
-            if value:
-                found.append(_unescape_url(value))
-    return found
+    # 2) Embed page — best source for carousel images
+    embed_url = post_url.rstrip("/") + "/embed/"
+    try:
+        embed_html = fetch_text(embed_url)
+        embed_imgs = _parse_embed_image_urls(embed_html)
+        if embed_imgs:
+            urls = embed_imgs
+    except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        TimeoutError,
+        OSError,
+    ) as exc:
+        logger.debug("Embed page failed for %s: %s", post_url, exc)
 
+    # 3) Fallback to oEmbed thumbnail if embed had nothing
+    if not urls and oembed_thumb:
+        urls = [oembed_thumb]
 
-def parse_display_urls(html: str) -> list[str]:
-    """Extract display_url / display_src values embedded in page JSON."""
-    found: list[str] = []
-    for key in ("display_url", "display_src"):
-        pattern = rf'"{key}"\s*:\s*"([^"]+)"'
-        for match in re.finditer(pattern, html):
-            value = _unescape_url(match.group(1).strip())
-            if value:
-                found.append(value)
-    return found
+    # 4) Last resort: HTML og:image / display_url
+    if not urls:
+        try:
+            html = fetch_text(post_url, headers={"Accept": "text/html"})
+            for pat in [
+                r'property=["\']og:image["\']\s+content=["\']([^"\']+)["\']',
+                r'content=["\']([^"\']+)["\']\s+property=["\']og:image["\']',
+            ]:
+                for m in re.finditer(pat, html, flags=re.IGNORECASE):
+                    val = m.group(1).strip()
+                    if val:
+                        urls.append(_unescape_url(val))
+            for key in ("display_url", "display_src"):
+                for m in re.finditer(rf'"{key}"\s*:\s*"([^"]+)"', html):
+                    val = _unescape_url(m.group(1).strip())
+                    if val:
+                        urls.append(val)
+        except (
+            urllib.error.URLError,
+            urllib.error.HTTPError,
+            TimeoutError,
+            OSError,
+        ) as exc:
+            logger.debug("HTML resolve failed for %s: %s", post_url, exc)
+
+    return _dedupe(urls), metadata
 
 
 def _unescape_url(value: str) -> str:
     """Decode common Instagram JSON URL escapes."""
     with contextlib.suppress(UnicodeDecodeError):
-        # Handles \u0026 etc. when present as unicode escapes
         value = value.encode("utf-8").decode("unicode_escape")
     return (
         value.replace("\\u0026", "&").replace("\\/", "/").replace("&amp;", "&").strip()
@@ -119,59 +214,6 @@ def _dedupe(urls: list[str]) -> list[str]:
             seen.add(url)
             out.append(url)
     return out
-
-
-def resolve_image_urls(post_url: str) -> tuple[list[str], dict[str, str]]:
-    """Resolve public image URLs for a post.
-
-    Order: oEmbed → og:image HTML → display_url scrape.
-    Returns (urls, metadata) where metadata may include author/caption.
-    """
-    metadata: dict[str, str] = {}
-    urls: list[str] = []
-
-    # 1) oEmbed
-    oembed_url = "https://www.instagram.com/api/v1/oembed/?url=" + urllib.parse.quote(
-        post_url, safe=""
-    )
-    try:
-        body = fetch_text(
-            oembed_url,
-            headers={"Accept": "application/json"},
-        )
-        data = json.loads(body)
-        if isinstance(data, dict):
-            urls.extend(parse_oembed_image_urls(data))
-            author = data.get("author_name")
-            title = data.get("title")
-            if isinstance(author, str) and author:
-                metadata["author"] = author
-            if isinstance(title, str) and title:
-                metadata["caption"] = title
-    except (
-        urllib.error.URLError,
-        urllib.error.HTTPError,
-        TimeoutError,
-        json.JSONDecodeError,
-        OSError,
-    ) as exc:
-        logger.debug("oEmbed resolve failed for %s: %s", post_url, exc)
-
-    # 2-3) HTML meta + display_url if still empty or for carousel extras
-    if not urls:
-        try:
-            html = fetch_text(post_url, headers={"Accept": "text/html"})
-            urls.extend(parse_og_image_urls(html))
-            urls.extend(parse_display_urls(html))
-        except (
-            urllib.error.URLError,
-            urllib.error.HTTPError,
-            TimeoutError,
-            OSError,
-        ) as exc:
-            logger.debug("HTML resolve failed for %s: %s", post_url, exc)
-
-    return _dedupe(urls), metadata
 
 
 def _extension_for_content_type(content_type: str) -> str:
@@ -226,7 +268,7 @@ def resolve_and_download_photos(
     dest_dir: Path,
     shortcode: str,
 ) -> tuple[list[Path], dict[str, str]]:
-    """Resolve image URLs and download them to dest_dir."""
+    """Resolve image URLs (including carousel) and download them."""
     urls, metadata = resolve_image_urls(post_url)
     if not urls:
         return [], metadata
