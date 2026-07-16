@@ -98,6 +98,12 @@ class InstagramDownloader(BaseDownloader):
 
         except yt_dlp.utils.DownloadError as e:
             error_text = str(e).lower()
+            if "no video formats" in error_text:
+                msg = (
+                    "این پست فقط عکس دارد. ربات فعلاً فقط ویدیو و ریلز "
+                    "اینستاگرام را پشتیبانی می‌کند."
+                )
+                raise MediaNotFoundError(msg) from e
             if "private" in error_text or "not found" in error_text:
                 msg = f"Content not found or private: {e}"
                 raise MediaNotFoundError(msg) from e
@@ -136,8 +142,6 @@ class InstagramDownloader(BaseDownloader):
             "quiet": True,
             "no_warnings": True,
             "writeinfojson": True,
-            "writethumbnail": True,
-            "format_sort": ["res:1080", "ext"],
             "http_headers": {
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -153,27 +157,7 @@ class InstagramDownloader(BaseDownloader):
             ydl_opts["cookiefile"] = str(cookie_file)
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                info = ydl.extract_info(url, download=True)  # type: ignore[return-value]
-            except yt_dlp.utils.DownloadError as e:
-                error_text = str(e).lower()
-                if "no video formats" in error_text:
-                    ydl_opts_no_video = dict(ydl_opts)
-                    ydl_opts_no_video["skip_download"] = True
-                    ydl_opts_no_video["format_sort"] = []
-                    with yt_dlp.YoutubeDL(ydl_opts_no_video) as ydl2:
-                        info = ydl2.extract_info(url, download=False)
-                        if info is None:
-                            msg = "yt-dlp returned no info"
-                            raise DownloadError(msg) from e
-                        thumb_url = info.get("thumbnail")
-                        if thumb_url:
-                            self._download_thumbnail(
-                                str(thumb_url), temp_dir, info.get("id", shortcode)
-                            )
-                        return info  # type: ignore[return-value]
-                raise
-
+            info = ydl.extract_info(url, download=True)  # type: ignore[return-value]
             if info is None:
                 msg = "yt-dlp returned no info"
                 raise DownloadError(msg)
