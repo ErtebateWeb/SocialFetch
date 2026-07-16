@@ -43,6 +43,7 @@ dev = [
     "ruff>=0.3",
     "black>=24.2",
     "pre-commit>=3.6",
+    "pytest-asyncio>=0.21",
 ]
 
 [project.urls]
@@ -90,6 +91,7 @@ module = ["yt_dlp", "socialfetch.downloaders.instagram", "socialfetch.config.set
 ignore_errors = true
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
