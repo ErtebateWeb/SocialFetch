@@ -15,6 +15,7 @@ authors = [
 dependencies = [
     "yt-dlp>=2025.05.22",
     "pydantic-settings>=2.0",
+    "python-telegram-bot>=21.0",
 ]
 keywords = [
     "social-media",
