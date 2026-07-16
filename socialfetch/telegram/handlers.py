@@ -110,21 +110,46 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             size_mb = path.stat().st_size / (1024 * 1024)
 
             if size_mb > 49:
-                # Try Document (2GB limit) first, fallback to source link
+                # Try compress with ffmpeg to fit under 50MB
+                compressed = path.with_suffix(".compressed.mp4")
                 try:
-                    with path.open("rb") as f:
-                        await update.message.reply_document(
-                            document=f,
-                            caption=file_caption,
-                            filename=path.name,
-                        )
-                except Exception:
-                    await update.message.reply_text(
-                        f"⚠️ File too large ({size_mb:.0f}MB)\n"
-                        f"🔗 [Open in YouTube]({result.url})",
-                        parse_mode=ParseMode.MARKDOWN,
-                        disable_web_page_preview=True,
+                    import subprocess as sp
+                    # Target ~45MB for 50MB limit headroom
+                    target_bitrate = int(
+                        45 * 8192 / max(path.stat().st_size / (1024 * 1024), 1)
                     )
+                    cmd = [
+                        "ffmpeg", "-y", "-i", str(path),
+                        "-c:v", "libx264", "-b:v", f"{target_bitrate}k",
+                        "-c:a", "aac", "-b:a", "128k",
+                        "-movflags", "+faststart",
+                        str(compressed),
+                    ]
+                    sp.run(cmd, capture_output=True, timeout=300)
+                    threshold = 49 * 1024 * 1024
+                    if compressed.exists() and compressed.stat().st_size < threshold:
+                        with compressed.open("rb") as f:
+                            await update.message.reply_video(
+                                video=f,
+                                caption=file_caption,
+                                supports_streaming=True,
+                            )
+                        compressed.unlink()
+                        path.unlink()
+                        continue
+                except Exception:
+                    pass
+                finally:
+                    if compressed.exists():
+                        compressed.unlink()
+
+                # Compression failed — send source link as last resort
+                await update.message.reply_text(
+                    f"⚠️ File too large ({size_mb:.0f}MB)\n"
+                    f"🔗 [Open in YouTube]({result.url})",
+                    parse_mode=ParseMode.MARKDOWN,
+                    disable_web_page_preview=True,
+                )
                 continue
 
             with path.open("rb") as f:
