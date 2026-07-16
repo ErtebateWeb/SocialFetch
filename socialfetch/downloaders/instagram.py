@@ -136,6 +136,8 @@ class InstagramDownloader(BaseDownloader):
             "quiet": True,
             "no_warnings": True,
             "writeinfojson": True,
+            "writethumbnail": True,
+            "format_sort": ["res:1080", "ext"],
             "http_headers": {
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -151,7 +153,27 @@ class InstagramDownloader(BaseDownloader):
             ydl_opts["cookiefile"] = str(cookie_file)
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)  # type: ignore[return-value]
+            try:
+                info = ydl.extract_info(url, download=True)  # type: ignore[return-value]
+            except yt_dlp.utils.DownloadError as e:
+                error_text = str(e).lower()
+                if "no video formats" in error_text:
+                    ydl_opts_no_video = dict(ydl_opts)
+                    ydl_opts_no_video["skip_download"] = True
+                    ydl_opts_no_video["format_sort"] = []
+                    with yt_dlp.YoutubeDL(ydl_opts_no_video) as ydl2:
+                        info = ydl2.extract_info(url, download=False)
+                        if info is None:
+                            msg = "yt-dlp returned no info"
+                            raise DownloadError(msg) from e
+                        thumb_url = info.get("thumbnail")
+                        if thumb_url:
+                            self._download_thumbnail(
+                                str(thumb_url), temp_dir, info.get("id", shortcode)
+                            )
+                        return info  # type: ignore[return-value]
+                raise
+
             if info is None:
                 msg = "yt-dlp returned no info"
                 raise DownloadError(msg)
@@ -190,3 +212,13 @@ class InstagramDownloader(BaseDownloader):
             return MediaType.CAROUSEL
 
         return MediaType.PHOTO
+
+    def _download_thumbnail(self, url: str, output_dir: Path, name: str) -> None:
+        """Download a thumbnail image for photo-only posts."""
+        import contextlib
+        import urllib.request
+
+        ext = ".jpg"
+        dest = output_dir / f"{name}{ext}"
+        with contextlib.suppress(Exception):
+            urllib.request.urlretrieve(url, str(dest))

@@ -41,6 +41,9 @@ class LocalStorage(StorageBackend):
             if not src_path.exists():
                 continue
             dest = post_dir / src_path.name
+            if src_path.resolve() == dest.resolve():
+                saved.append(dest)
+                continue
             shutil.copy2(str(src_path), str(dest))
             saved.append(dest)
 
