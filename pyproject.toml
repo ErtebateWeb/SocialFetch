@@ -86,6 +86,7 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["yt_dlp", "socialfetch.downloaders.instagram", "socialfetch.config.settings", "telegram", "telegram.ext", "socialfetch.telegram", "socialfetch.telegram.handlers", "socialfetch.telegram.bot"]

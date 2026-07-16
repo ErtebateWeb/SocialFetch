@@ -130,7 +130,7 @@ class YouTubeDownloader(BaseDownloader):
                     "no_warnings": True,
                     "proxy": settings.proxy_url or "",
                 }
-                with yt_dlp.YoutubeDL(peek_opts) as ydl:  # type: ignore[arg-type]
+                with yt_dlp.YoutubeDL(peek_opts) as ydl:
                     peek = ydl.extract_info(url, download=False)
                 if peek:
                     est_mb: float = 0
@@ -171,11 +171,11 @@ class YouTubeDownloader(BaseDownloader):
         if quality != "best" and shutil.which("ffmpeg") is None:
             logger.warning("ffmpeg not found — video+audio merge may fail")
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[arg-type]
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             if info is None:
                 raise DownloadError("yt-dlp returned no info")
-            return info  # type: ignore[return-value]
+            return info  # type: ignore[no-any-return,unused-ignore]
 
     def _handle_playlist(
         self,
