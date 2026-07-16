@@ -1,17 +1,16 @@
-FROM python:3.11-slim AS base
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-RUN addgroup --system --gid 1000 appgroup && \
-    adduser --system --uid 1000 --ingroup appgroup appuser
-
-COPY pyproject.toml .
-RUN pip install --no-cache-dir .
-
 COPY . .
 
-USER appuser
+RUN pip install --no-cache-dir -e . && \
+    rm -rf ~/.cache/pip
 
-EXPOSE 8000
+ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "-m", "socialfetch"]
+CMD ["python", "run_bot.py"]
