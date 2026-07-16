@@ -89,30 +89,42 @@ def _parse_embed_image_urls(html: str) -> list[str]:
     then skip the first one if it appears >1 time (profile pic).
     Returns deduplicated image URLs in order.
     """
-    all_imgs = re.findall(r'(https://scontent[^"\\]+\.jpg)', html)
+    all_imgs = re.findall(r'(https://scontent[^"\\]+\.jpg[^"\\]*)', html)
     if not all_imgs:
         return []
 
     # Deduplicate by file ID, keeping first occurrence URL
-    seen: dict[str, str] = {}
+    post_images: list[str] = []
+    seen_fids: set[str] = set()
+
     for img in all_imgs:
+        # Skip profile/avatar pictures (CDN path has /v/t51.82787-19/)
+        if "/v/t51.82787-19/" in img:
+            continue
         fid = _file_id_from_url(img)
-        if fid not in seen:
-            seen[fid] = img
+        if fid and fid not in seen_fids:
+            seen_fids.add(fid)
+            # Clean up URL: get just the src (not srcset size descriptors)
+            url = img.split("  ")[0].strip().rstrip(",")
+            # Unescape HTML entities (&amp; -> &)
+            url = url.replace("&amp;", "&")
+            post_images.append(url)
 
-    file_ids = list(seen.keys())
+    return post_images
 
-    # Count occurrences to detect profile pic (appears >1 time)
-    # If there are multiple images, skip the first if it's repeated
-    if len(file_ids) > 1:
-        first_count = sum(
-            1 for img in all_imgs if _file_id_from_url(img) == file_ids[0]
-        )
-        if first_count > 1:
-            # First image is likely profile pic — skip it
-            file_ids = file_ids[1:]
 
-    return [seen[fid] for fid in file_ids]
+def _fetch_embed_page(url: str) -> str:
+    """Fetch Instagram embed page with minimal headers (no User-Agent).
+
+    Chrome User-Agent causes Instagram to return a JS-heavy page
+    without static image URLs. No User-Agent gives the simple page.
+    """
+    req = urllib.request.Request(url)
+    req.add_header("Accept", "text/html")
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        charset = resp.headers.get_content_charset() or "utf-8"
+        body: str = resp.read().decode(charset, errors="replace")
+        return body
 
 
 def resolve_image_urls(post_url: str) -> tuple[list[str], dict[str, str]]:
@@ -151,9 +163,12 @@ def resolve_image_urls(post_url: str) -> tuple[list[str], dict[str, str]]:
         logger.debug("oEmbed failed for %s: %s", post_url, exc)
 
     # 2) Embed page — best source for carousel images
-    embed_url = post_url.rstrip("/") + "/embed/"
+    base_post = post_url.split("?")[0].rstrip("/") + "/embed/"
+    embed_url = base_post
     try:
-        embed_html = fetch_text(embed_url)
+        # Fetch embed with minimal headers — Chrome UA triggers JS-only page
+        # without embedded image URLs
+        embed_html = _fetch_embed_page(embed_url)
         embed_imgs = _parse_embed_image_urls(embed_html)
         if embed_imgs:
             urls = embed_imgs

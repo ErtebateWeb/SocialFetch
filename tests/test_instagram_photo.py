@@ -9,22 +9,18 @@ import pytest
 from socialfetch.downloaders import instagram_photo as photo
 
 # --- Embed HTML fixture for carousel (3 images) ---
-CAROUSEL_EMBED_HTML = """
-<html><body>
-<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-19/" class="profile"/>
-<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-19/" class="profile"/>
-<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-15/747099071_a_n.jpg?stp=dst-jpg"/>
-<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-19/747324722_b_n.jpg?stp=dst-jpg"/>
-<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-15/747439930_c_n.jpg?stp=dst-jpg"/>
-</body></html>
-"""
+CAROUSEL_EMBED_HTML = """<html><body>
+<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-19/448484964_profile_pic_n.jpg"/>
+<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-19/448484964_profile_pic_n.jpg"/>
+<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-15/747099071_18449479354143527_4879027591393916808_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=107"/>
+<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-15/747324722_18449843065143527_5432983132883574853_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=106"/>
+<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-15/747439930_18449664532143527_3047040225247893622_n.jpg?stp=dst-jpg_e15_tt6&_nc_cat=109"/>
+</body></html>"""
 
-SINGLE_EMBED_HTML = """
-<html><body>
-<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-19/profile_pic_n.jpg"/>
-<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-15/post_image_n.jpg"/>
-</body></html>
-"""
+SINGLE_EMBED_HTML = """<html><body>
+<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-19/448484964_profile_pic_n.jpg"/>
+<img src="https://scontent-prg1-1.cdninstagram.com/v/t51.82787-15/post_image_n.jpg?stp=dst-jpg"/>
+</body></html>"""
 
 
 class TestEmbedParser:
@@ -38,8 +34,9 @@ class TestEmbedParser:
 
     def test_single_image(self) -> None:
         urls = photo._parse_embed_image_urls(SINGLE_EMBED_HTML)
-        # Profile pic appears once, single image appears once → keep both
-        assert len(urls) == 2
+        # Profile pic (path /v/t51.82787-19/) skipped, only post image remains
+        assert len(urls) == 1
+        assert "post_image_n.jpg" in urls[0]
 
     def test_empty_html(self) -> None:
         urls = photo._parse_embed_image_urls("<html></html>")
@@ -53,11 +50,13 @@ class TestResolveCarousel:
         ) -> str:
             if "oembed" in url:
                 return json.dumps({"thumbnail_url": "https://cdn.example/thumb.jpg"})
-            if "/embed/" in url:
-                return CAROUSEL_EMBED_HTML
             return ""
 
+        def fake_fetch_embed(url: str) -> str:
+            return CAROUSEL_EMBED_HTML
+
         monkeypatch.setattr(photo, "fetch_text", fake_fetch_text)
+        monkeypatch.setattr(photo, "_fetch_embed_page", fake_fetch_embed)
         urls, meta = photo.resolve_image_urls("https://www.instagram.com/p/ABC/")
         assert len(urls) == 3  # 3 carousel images from embed
         assert "author" not in meta
@@ -75,11 +74,13 @@ class TestResolveCarousel:
                         "author_name": "alice",
                     }
                 )
-            if "/embed/" in url:
-                return "<html></html>"  # empty embed
             return ""
 
+        def fake_fetch_embed(url: str) -> str:
+            return "<html></html>"
+
         monkeypatch.setattr(photo, "fetch_text", fake_fetch_text)
+        monkeypatch.setattr(photo, "_fetch_embed_page", fake_fetch_embed)
         urls, meta = photo.resolve_image_urls("https://www.instagram.com/p/ABC/")
         assert urls == ["https://cdn.example/thumb.jpg"]
         assert meta["author"] == "alice"
