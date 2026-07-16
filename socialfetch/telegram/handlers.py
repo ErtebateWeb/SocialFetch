@@ -115,6 +115,8 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                         video=f,
                         caption=file_caption,
                         supports_streaming=True,
+                        read_timeout=120,
+                        write_timeout=120,
                     )
                 else:
                     await update.message.reply_photo(
@@ -157,7 +159,11 @@ async def _send_large_file(
             if compressed.exists() and compressed.stat().st_size < 49 * 1024 * 1024:
                 with compressed.open("rb") as f:
                     await update.message.reply_video(
-                        video=f, caption=caption, supports_streaming=True,
+                        video=f,
+                        caption=caption,
+                        supports_streaming=True,
+                        read_timeout=120,
+                        write_timeout=120,
                     )
                 compressed.unlink()
                 return True
@@ -190,7 +196,11 @@ async def _send_large_file(
                 seg_cap = caption if i == 0 else None
                 with seg.open("rb") as f:
                     await update.message.reply_video(
-                        video=f, caption=seg_cap, supports_streaming=True,
+                        video=f,
+                        caption=seg_cap,
+                        supports_streaming=True,
+                        read_timeout=120,
+                        write_timeout=120,
                     )
                 seg.unlink(missing_ok=True)
             return True
