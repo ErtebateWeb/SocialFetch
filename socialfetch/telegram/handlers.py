@@ -1,4 +1,5 @@
 """Message handlers for the SocialFetch Telegram bot."""
+
 import logging
 from pathlib import Path
 
@@ -105,9 +106,7 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                         write_timeout=300,
                     )
                 else:
-                    await update.message.reply_photo(
-                        photo=f, caption=file_caption
-                    )
+                    await update.message.reply_photo(photo=f, caption=file_caption)
 
             path.unlink(missing_ok=True)
 

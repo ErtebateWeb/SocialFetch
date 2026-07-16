@@ -1,4 +1,5 @@
 """Instagram downloader implementation."""
+
 import logging
 import os
 import shutil
@@ -80,9 +81,11 @@ class InstagramDownloader(BaseDownloader):
                     media_type = (
                         MediaType.CAROUSEL
                         if is_carousel
-                        else MediaType.REEL
-                        if is_video and "/reel/" in request.url
-                        else MediaType.VIDEO if is_video else MediaType.PHOTO
+                        else (
+                            MediaType.REEL
+                            if is_video and "/reel/" in request.url
+                            else MediaType.VIDEO if is_video else MediaType.PHOTO
+                        )
                     )
                     return MediaInfo(
                         platform="instagram",

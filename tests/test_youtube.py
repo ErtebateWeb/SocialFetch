@@ -1,4 +1,5 @@
 """Unit tests for the YouTube downloader."""
+
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -140,9 +141,7 @@ class TestBuildMediaInfo:
 
 
 class TestErrorHandling:
-    def test_invalid_url_returns_none(
-        self, downloader: YouTubeDownloader
-    ) -> None:
+    def test_invalid_url_returns_none(self, downloader: YouTubeDownloader) -> None:
         vid = YouTubeDownloader._extract_video_id("https://example.com")
         assert vid is None
 

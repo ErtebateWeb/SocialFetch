@@ -1,10 +1,12 @@
 """YouTube downloader implementation using yt-dlp."""
+
 import asyncio
 import logging
 import re
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Any, cast
 
 import yt_dlp
 
@@ -64,8 +66,8 @@ class YouTubeDownloader(BaseDownloader):
             )
 
             # Check for playlist
-            entries = info.get("entries") if info.get("_type") == "playlist" else None
-            if entries:
+            entries = cast("list[dict[str, Any]]", info.get("entries"))
+            if info.get("_type") == "playlist" and entries:
                 return self._handle_playlist(
                     entries, info, video_id, request.url, output_dir, temp_dir, request
                 )
@@ -103,7 +105,7 @@ class YouTubeDownloader(BaseDownloader):
 
     def _download_video(
         self, url: str, temp_dir: Path, request: DownloadRequest
-    ) -> dict:
+    ) -> dict[str, object]:
         """Execute yt-dlp and return extracted info."""
         quality: str = request.extra.get("quality", "best")  # type: ignore[assignment]
         fmt = self._get_format(quality)
@@ -132,7 +134,7 @@ class YouTubeDownloader(BaseDownloader):
                 with yt_dlp.YoutubeDL(peek_opts) as ydl:  # type: ignore[arg-type]
                     peek = ydl.extract_info(url, download=False)
                 if peek:
-                    est_mb = 0
+                    est_mb: float = 0
                     for f in peek.get("formats") or []:
                         if f.get("filesize"):
                             est_mb += f["filesize"]
@@ -140,9 +142,7 @@ class YouTubeDownloader(BaseDownloader):
                             est_mb += f["filesize_approx"]
                     est_mb = est_mb / (1024 * 1024)
                     if est_mb > 45:
-                        logger.info(
-                            "Estimated %sMB, downgrading to 480p", est_mb
-                        )
+                        logger.info("Estimated %sMB, downgrading to 480p", est_mb)
                         fmt = "bestvideo[height<=480]+bestaudio/best[height<=480]"
                         ydl_opts["format"] = fmt
             except Exception:
@@ -176,12 +176,12 @@ class YouTubeDownloader(BaseDownloader):
             info = ydl.extract_info(url, download=True)
             if info is None:
                 raise DownloadError("yt-dlp returned no info")
-            return info
+            return info  # type: ignore[return-value]
 
     def _handle_playlist(
         self,
-        entries: list,
-        playlist_info: dict,
+        entries: list[Any],
+        playlist_info: dict[str, Any],
         video_id: str,
         url: str,
         output_dir: Path,
@@ -189,10 +189,12 @@ class YouTubeDownloader(BaseDownloader):
         request: DownloadRequest,
     ) -> MediaInfo:
         """Handle playlist downloads — return as CAROUSEL."""
-        max_items = request.extra.get("max_playlist", 10)
+        max_items: Any = request.extra.get("max_playlist", 10)
         files: list[Path] = []
-
-        for entry in entries[:max_items]:
+        count = 0
+        for entry in entries:
+            if count >= max_items:
+                break
             if entry and entry.get("id"):
                 entry_url = f"https://www.youtube.com/watch?v={entry['id']}"
                 try:
@@ -227,10 +229,21 @@ class YouTubeDownloader(BaseDownloader):
         """Move downloaded files to permanent directory."""
         files: list[Path] = []
         valid_extensions = {
-            ".mp4", ".webm", ".mkv", ".avi",
-            ".mp3", ".m4a", ".ogg", ".wav",
-            ".vtt", ".srt", ".ass",
-            ".jpg", ".jpeg", ".png", ".webp",
+            ".mp4",
+            ".webm",
+            ".mkv",
+            ".avi",
+            ".mp3",
+            ".m4a",
+            ".ogg",
+            ".wav",
+            ".vtt",
+            ".srt",
+            ".ass",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
         }
 
         for fpath in temp_dir.iterdir():
@@ -244,7 +257,7 @@ class YouTubeDownloader(BaseDownloader):
 
     def _build_media_info(
         self,
-        info: dict,
+        info: dict[str, Any],
         files: list[Path],
         video_id: str,
         url: str,

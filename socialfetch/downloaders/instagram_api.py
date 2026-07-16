@@ -1,4 +1,5 @@
 """Instagram mobile API downloader (requires cookies)."""
+
 import hashlib
 import logging
 import os
@@ -193,9 +194,7 @@ class InstagramAPIDownloader:
                             path = temp_dir / f"{shortcode}_{idx+1}.jpg"
                             self._download_file(img_url, str(path))
                             if path.stat().st_size > 1000:
-                                file_hash = hashlib.md5(
-                                    path.read_bytes()
-                                ).hexdigest()
+                                file_hash = hashlib.md5(path.read_bytes()).hexdigest()
                                 if file_hash not in seen_hashes:
                                     seen_hashes.add(file_hash)
                                     downloaded_files.append(path)
@@ -211,9 +210,7 @@ class InstagramAPIDownloader:
                         if path.stat().st_size > 1000:
                             downloaded_files.append(path)
                 else:
-                    candidates = item.get("image_versions2", {}).get(
-                        "candidates", []
-                    )
+                    candidates = item.get("image_versions2", {}).get("candidates", [])
                     if candidates:
                         best = max(
                             candidates,
@@ -241,9 +238,7 @@ class InstagramAPIDownloader:
                 f.suffix.lower() in {".mp4", ".webm", ".mkv", ".avi"}
                 for f in permanent_files
             )
-            media_type = (
-                "carousel" if is_carousel else "video" if is_video else "photo"
-            )
+            media_type = "carousel" if is_carousel else "video" if is_video else "photo"
 
             return {
                 "files": permanent_files,
