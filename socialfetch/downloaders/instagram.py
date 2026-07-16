@@ -22,7 +22,9 @@ from socialfetch.downloaders.registry import DownloaderRegistry
 logger = logging.getLogger(__name__)
 
 
-@DownloaderRegistry.register("instagram", r"instagram[.]com/(?:p|reel|tv|stories)/")
+@DownloaderRegistry.register(
+    "instagram", r"(?:www\.)?instagram[.]com/(?:p|reel|tv|stories)/"
+)
 class InstagramDownloader(BaseDownloader):
     """Downloader for Instagram content using yt-dlp backend.
 
