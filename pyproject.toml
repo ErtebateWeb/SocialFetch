@@ -12,6 +12,9 @@ requires-python = ">=3.11"
 authors = [
     { name = "SocialFetch Contributors" },
 ]
+dependencies = [
+    "yt-dlp>=2025.05.22",
+]
 keywords = [
     "social-media",
     "downloader",
@@ -31,12 +34,6 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-[project.urls]
-Homepage = "https://github.com/ErtebateWeb/SocialFetch"
-Repository = "https://github.com/ErtebateWeb/SocialFetch"
-Issues = "https://github.com/ErtebateWeb/SocialFetch/issues"
-Changelog = "https://github.com/ErtebateWeb/SocialFetch/blob/main/CHANGELOG.md"
-
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4",
@@ -46,6 +43,12 @@ dev = [
     "black>=24.2",
     "pre-commit>=3.6",
 ]
+
+[project.urls]
+Homepage = "https://github.com/ErtebateWeb/SocialFetch"
+Repository = "https://github.com/ErtebateWeb/SocialFetch"
+Issues = "https://github.com/ErtebateWeb/SocialFetch/issues"
+Changelog = "https://github.com/ErtebateWeb/SocialFetch/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["socialfetch"]
@@ -80,6 +83,10 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["yt_dlp", "socialfetch.downloaders.instagram"]
+ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
