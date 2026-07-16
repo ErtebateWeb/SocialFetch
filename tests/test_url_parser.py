@@ -33,4 +33,4 @@ class TestURLParser:
 
     def test_parse_invalid_raises(self) -> None:
         with pytest.raises(InvalidURLError):
-            URLParser.parse("https://youtube.com/watch?v=123")
+            URLParser.parse("https://unknown.example.com/post/abc")
