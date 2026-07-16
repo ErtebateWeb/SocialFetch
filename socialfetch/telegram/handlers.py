@@ -1,7 +1,5 @@
 """Message handlers for the SocialFetch Telegram bot."""
 import logging
-import shutil
-import subprocess as sp
 from pathlib import Path
 
 from telegram import Update
@@ -99,13 +97,9 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             size_mb = path.stat().st_size / (1024 * 1024)
 
             if size_mb > 49:
-                sent = await _send_large_file(update, path, file_caption)
-                if sent:
-                    path.unlink(missing_ok=True)
-                    continue
-                # Fallback — plain text
                 await update.message.reply_text(
-                    f"⚠️ Could not send file ({size_mb:.0f}MB)"
+                    f"⚠️ File too large ({size_mb:.0f}MB > 50MB limit)\n"
+                    f"📄 {path.name}"
                 )
                 continue
 
@@ -130,93 +124,6 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     except Exception as e:
         logger.error("Download error: %s", e)
         await status_msg.edit_text(f"❌ Error: {str(e)[:200]}")
-
-
-async def _send_large_file(
-    update: Update, path: Path, caption: str | None
-) -> bool:
-    """Send a file >50MB. Tries compress then split. Returns True if sent."""
-    has_ffmpeg = shutil.which("ffmpeg") is not None
-
-    # 1) Compress with increasing aggression
-    if has_ffmpeg:
-        compressed = path.with_suffix(".compressed.mp4")
-        try:
-            orig_size = path.stat().st_size
-            for crf, scale in [(28, None), (32, "720"), (35, "480")]:
-                cmd = [
-                    "ffmpeg", "-y", "-i", str(path),
-                    "-c:v", "libx264", "-preset", "fast",
-                    "-crf", str(crf), "-c:a", "aac", "-b:a", "96k",
-                    "-movflags", "+faststart",
-                ]
-                if scale:
-                    cmd += ["-vf", f"scale={scale}:-2"]
-                cmd.append(str(compressed))
-                sp.run(cmd, capture_output=True, timeout=300)
-                if compressed.exists():
-                    new_size = compressed.stat().st_size
-                    logger.info(
-                        "compress: crf=%s scale=%s %s->%sMB",
-                        crf, scale or "orig",
-                        orig_size // 1024 // 1024,
-                        new_size // 1024 // 1024,
-                    )
-                    if new_size < 49 * 1024 * 1024:
-                        break
-            if compressed.exists() and compressed.stat().st_size < 49 * 1024 * 1024:
-                with compressed.open("rb") as f:
-                    await update.message.reply_video(
-                        video=f,
-                        caption=caption,
-                        supports_streaming=True,
-                        read_timeout=120,
-                        write_timeout=120,
-                    )
-                compressed.unlink()
-                return True
-        except Exception as exc:
-            logger.error("compress failed: %s", exc)
-        finally:
-            if compressed.exists():
-                compressed.unlink()
-
-    # 2) Split without re-encode
-    if has_ffmpeg:
-        try:
-            dur_str = sp.run(
-                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                 "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
-                capture_output=True, text=True, timeout=30,
-            ).stdout.strip()
-            dur = float(dur_str)
-            size_mb = path.stat().st_size / (1024 * 1024)
-            parts = int(size_mb / 45) + 1
-            seg_dur = dur / parts
-            logger.info("splitting %sMB into %s parts", size_mb, parts)
-
-            for i in range(parts):
-                seg = path.with_name(f"{path.stem}_part{i+1}{path.suffix}")
-                ss = i * seg_dur
-                sp.run([
-                    "ffmpeg", "-y", "-ss", str(ss), "-i", str(path),
-                    "-t", str(seg_dur), "-c", "copy", str(seg),
-                ], capture_output=True, timeout=300)
-                seg_cap = caption if i == 0 else None
-                with seg.open("rb") as f:
-                    await update.message.reply_video(
-                        video=f,
-                        caption=seg_cap,
-                        supports_streaming=True,
-                        read_timeout=120,
-                        write_timeout=120,
-                    )
-                seg.unlink(missing_ok=True)
-            return True
-        except Exception as exc:
-            logger.error("split failed: %s", exc)
-
-    return False
 
 
 def get_handlers() -> list:
