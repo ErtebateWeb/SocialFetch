@@ -5,6 +5,7 @@ import logging
 from telegram import BotCommand
 from telegram.ext import Application
 
+import socialfetch.downloaders  # noqa: F401 - register all downloaders
 from socialfetch.telegram.handlers import get_handlers
 
 logger = logging.getLogger(__name__)

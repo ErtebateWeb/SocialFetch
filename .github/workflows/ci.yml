@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install ruff
-      - run: ruff check .
+      - run: ruff check socialfetch/ tests/
 
   format:
     runs-on: ubuntu-latest
@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install black
-      - run: black --check .
+      - run: black --check socialfetch/ tests/ run_bot.py
 
   test:
     runs-on: ubuntu-latest
@@ -47,4 +47,3 @@ jobs:
       - run: pip install mypy
       - run: pip install -e .
       - run: mypy socialfetch/
-

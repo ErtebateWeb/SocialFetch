@@ -98,6 +98,12 @@ class InstagramDownloader(BaseDownloader):
 
         except yt_dlp.utils.DownloadError as e:
             error_text = str(e).lower()
+            if "no video formats" in error_text:
+                msg = (
+                    "این پست فقط عکس دارد. ربات فعلاً فقط ویدیو و ریلز "
+                    "اینستاگرام را پشتیبانی می‌کند."
+                )
+                raise MediaNotFoundError(msg) from e
             if "private" in error_text or "not found" in error_text:
                 msg = f"Content not found or private: {e}"
                 raise MediaNotFoundError(msg) from e
@@ -190,3 +196,13 @@ class InstagramDownloader(BaseDownloader):
             return MediaType.CAROUSEL
 
         return MediaType.PHOTO
+
+    def _download_thumbnail(self, url: str, output_dir: Path, name: str) -> None:
+        """Download a thumbnail image for photo-only posts."""
+        import contextlib
+        import urllib.request
+
+        ext = ".jpg"
+        dest = output_dir / f"{name}{ext}"
+        with contextlib.suppress(Exception):
+            urllib.request.urlretrieve(url, str(dest))
