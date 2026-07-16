@@ -17,6 +17,7 @@ from socialfetch.core.models import (
     MediaType,
 )
 from socialfetch.core.types import PlatformName
+from socialfetch.downloaders.instagram_photo import resolve_and_download_photos
 from socialfetch.downloaders.registry import DownloaderRegistry
 
 logger = logging.getLogger(__name__)
@@ -26,13 +27,13 @@ logger = logging.getLogger(__name__)
     "instagram", r"(?:www\.)?instagram[.]com/(?:p|reel|tv|stories)/"
 )
 class InstagramDownloader(BaseDownloader):
-    """Downloader for Instagram content using yt-dlp backend.
+    """Downloader for Instagram content using yt-dlp + photo fallback.
 
     Supports:
-    - Single image posts
-    - Carousel (multi-image) posts
-    - Video reels
-    - IGTV
+    - Single image posts (HTTP photo fallback, ADR 0013)
+    - Carousel (multi-image) posts (best-effort photo path)
+    - Video reels (yt-dlp)
+    - IGTV (yt-dlp)
     - Stories (with cookie authentication)
 
     Usage::
@@ -99,11 +100,9 @@ class InstagramDownloader(BaseDownloader):
         except yt_dlp.utils.DownloadError as e:
             error_text = str(e).lower()
             if "no video formats" in error_text:
-                msg = (
-                    "این پست فقط عکس دارد. ربات فعلاً فقط ویدیو و ریلز "
-                    "اینستاگرام را پشتیبانی می‌کند."
+                return self._download_photo_fallback(
+                    request.url, shortcode, output_dir, e
                 )
-                raise MediaNotFoundError(msg) from e
             if "private" in error_text or "not found" in error_text:
                 msg = f"Content not found or private: {e}"
                 raise MediaNotFoundError(msg) from e
@@ -114,6 +113,40 @@ class InstagramDownloader(BaseDownloader):
             raise DownloadError(msg) from e
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def _download_photo_fallback(
+        self,
+        url: str,
+        shortcode: str,
+        output_dir: Path,
+        cause: Exception,
+    ) -> MediaInfo:
+        """Download photo-only posts without yt-dlp (ADR 0013)."""
+        files, meta = resolve_and_download_photos(url, output_dir, shortcode)
+        if not files:
+            msg = (
+                "این پست فقط عکس دارد و دانلود تصویر ناموفق بود. "
+                "ممکن است محدودیت IP یا دیوار ورود اینستاگرام باشد."
+            )
+            raise MediaNotFoundError(msg) from cause
+
+        media_type = MediaType.CAROUSEL if len(files) > 1 else MediaType.PHOTO
+        return MediaInfo(
+            platform="instagram",
+            media_type=media_type,
+            shortcode=shortcode,
+            url=url,
+            files=files,
+            caption=meta.get("caption") or "",
+            author=meta.get("author") or "",
+            metadata=MediaMetadata(
+                likes=0,
+                comments=0,
+                views=0,
+                duration_seconds=None,
+                raw={"source": "instagram_photo_fallback", **meta},
+            ),
+        )
 
     def _extract_shortcode(self, url: str) -> str | None:
         """Extract the Instagram shortcode from a URL."""
@@ -196,13 +229,3 @@ class InstagramDownloader(BaseDownloader):
             return MediaType.CAROUSEL
 
         return MediaType.PHOTO
-
-    def _download_thumbnail(self, url: str, output_dir: Path, name: str) -> None:
-        """Download a thumbnail image for photo-only posts."""
-        import contextlib
-        import urllib.request
-
-        ext = ".jpg"
-        dest = output_dir / f"{name}{ext}"
-        with contextlib.suppress(Exception):
-            urllib.request.urlretrieve(url, str(dest))

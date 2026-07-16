@@ -1,12 +1,14 @@
 """Message handlers for the SocialFetch Telegram bot."""
 
 import logging
+from pathlib import Path
 
 from telegram import Update
 from telegram.constants import ChatAction, ParseMode
 from telegram.ext import CommandHandler, ContextTypes, MessageHandler, filters
 
-from socialfetch.services.downloader import DownloadOrchestrator
+from socialfetch.core.models import MediaInfo
+from socialfetch.services.downloader import DownloadOrchestrator, DownloadResult
 
 logger = logging.getLogger(__name__)
 orchestrator = DownloadOrchestrator()
@@ -14,6 +16,44 @@ orchestrator = DownloadOrchestrator()
 INSTAGRAM_PATTERN = r"(?:https?://)?(?:www\.)?instagram\.com/(?:p|reel|tv|stories)/\S+"
 YOUTUBE_PATTERN = r"(?:https?://)?(?:www\.)?(?:youtube\.com|youtu\.be)/\S+"
 TIKTOK_PATTERN = r"(?:https?://)?(?:www\.)?tiktok\.com/\S+"
+
+# Telegram media caption hard limit
+_CAPTION_LIMIT = 1024
+
+
+def format_media_caption(media: MediaInfo, source_url: str | None = None) -> str:
+    """Build a Telegram caption like classic Instagram bots.
+
+    Includes author, post caption, and optional source link.
+    Truncates to Telegram's 1024-character media caption limit.
+    """
+    parts: list[str] = []
+    author = (media.author or "").strip()
+    caption = (media.caption or "").strip()
+    url = (source_url or media.url or "").strip()
+
+    if author:
+        # Instagram-style handle when author has no @
+        handle = author if author.startswith("@") else f"@{author}"
+        parts.append(handle)
+
+    if caption:
+        parts.append(caption)
+
+    if url:
+        parts.append(f"🔗 {url}")
+
+    text = "\n\n".join(parts).strip()
+    if not text:
+        return ""
+
+    if len(text) <= _CAPTION_LIMIT:
+        return text
+
+    # Prefer keeping author + start of caption; drop URL first if needed
+    suffix = "…"
+    budget = _CAPTION_LIMIT - len(suffix)
+    return text[:budget].rstrip() + suffix
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -50,20 +90,33 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     try:
         await update.message.chat.send_action(ChatAction.TYPING)
-        result = await orchestrator.download(url)
+        result: DownloadResult = await orchestrator.download(url)
 
         if result.error:
             await status_msg.edit_text(f"❌ {result.error}")
             return
 
+        if not result.saved_paths:
+            await status_msg.edit_text("❌ No files downloaded")
+            return
+
         await status_msg.edit_text(f"✅ {len(result.saved_paths)} file(s)! Sending...")
 
-        for file_path in result.saved_paths:
-            with open(file_path, "rb") as f:
-                if file_path.lower().endswith((".mp4", ".webm", ".mkv")):
-                    await update.message.reply_video(video=f, supports_streaming=True)
+        caption = format_media_caption(result.media, source_url=result.url)
+
+        for index, file_path in enumerate(result.saved_paths):
+            # Put caption on the first media only (like multi-file albums)
+            file_caption = caption if index == 0 else None
+            path = Path(file_path)
+            with path.open("rb") as f:
+                if path.suffix.lower() in {".mp4", ".webm", ".mkv"}:
+                    await update.message.reply_video(
+                        video=f,
+                        caption=file_caption,
+                        supports_streaming=True,
+                    )
                 else:
-                    await update.message.reply_photo(photo=f)
+                    await update.message.reply_photo(photo=f, caption=file_caption)
 
         await status_msg.delete()
 
