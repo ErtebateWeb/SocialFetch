@@ -108,6 +108,13 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             # Put caption on the first media only (like multi-file albums)
             file_caption = caption if index == 0 else None
             path = Path(file_path)
+            size_mb = path.stat().st_size / (1024 * 1024)
+            if size_mb > 49:
+                await update.message.reply_text(
+                    f"⚠️ File too large for Telegram ({size_mb:.0f}MB — max 50MB)\n"
+                    f"📄 {path.name}"
+                )
+                continue
             with path.open("rb") as f:
                 if path.suffix.lower() in {".mp4", ".webm", ".mkv"}:
                     await update.message.reply_video(
