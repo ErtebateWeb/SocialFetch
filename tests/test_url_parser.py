@@ -7,6 +7,7 @@ from socialfetch.downloaders.instagram import (  # noqa: F401  trigger registry
     InstagramDownloader,
 )
 from socialfetch.services.url_parser import URLParser
+from socialfetch.downloaders import instagram  # noqa: F401 - trigger registry
 
 
 class TestURLParser:
