@@ -108,10 +108,11 @@ async def cmd_ref(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     code = generate_referral(user_id)
     await update.message.reply_text(
-        f"**🎁 Your Referral Code**\n\n"
-        f"`{code}`\n\n"
+        "🎁 **Your Referral Code**\n\n"
+        f"**{code}**\n\n"
         "Share this code with friends! Each referral gives you **7 days of Premium**.\n"
-        "Your friend can use it with `/ref {code}`",
+        "Your friend can use it with:\n"
+        f"`/ref {code}`",
         parse_mode=ParseMode.MARKDOWN,
     )
 
