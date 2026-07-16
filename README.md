@@ -1,51 +1,263 @@
 # SocialFetch
 
-Open-source self-hosted Social Media Downloader Framework.
+> **Open-source self-hosted Social Media Downloader Framework**
+> دانلودر متن‌باز و قابل میزبانی شخصی برای شبکه‌های اجتماعی
 
-## Features (Planned)
+[![CI](https://github.com/ErtebateWeb/SocialFetch/actions/workflows/ci.yml/badge.svg)](https://github.com/ErtebateWeb/SocialFetch/actions/workflows/ci.yml)
 
-Status: 🚧 Under active development.
+---
 
-- **Instagram** - Download posts, stories, reels, and profile media
-- **TikTok** - Download videos without watermark
-- **YouTube** - Download videos and audio
-- **X (Twitter)** - Download tweets, videos, and media
-- Downloader plugin architecture for easy extension
-- REST API for programmatic access
-- Self-hosted with Docker support
+## Features / قابلیت‌ها
 
-## Architecture
+| Platform | Status | Download Type |
+|---|---|---|
+| **Instagram** | ✅ | Reels, Videos, Photos, Carousels, Captions |
+| **YouTube** | ✅ | Videos, Shorts, Playlists, Audio-only |
+| **TikTok** | 🚧 | Planned |
+| **X / Twitter** | 🚧 | Planned |
 
-SocialFetch is designed as a modular Python application.
+### Instagram
+- Photos via embed page + oEmbed fallback
+- Reels & videos via yt-dlp
+- **Full carousel** (all images) via mobile API + **cookies** + WARP proxy
+- Author, caption, like count included as caption
 
-The architecture will evolve incrementally during future sprints.
+### YouTube
+- Single videos, Shorts, Live streams
+- Playlists (as carousel, max 10 items by default)
+- Quality: `best`, `best+1080`, `best+480`, `audio-only`
+- Subtitles (optional, English)
+- **WARP proxy** to bypass bot detection
+- Auto-downgrade quality if estimated file > 45MB
+- Forced **mp4** output for Telegram inline playback
 
-See:
+### Telegram Bot
+- `@EW_SocialFetcher_bot` — paste a link, get media
+- Local `telegram-bot-api` server (Docker) — **2GB upload limit**
+- Multi-file carousels sent as album with caption on first
+- Large files sent inline as mp4 video
 
-- [planning/](planning/)
-- [ROADMAP.md](ROADMAP.md)
+---
 
-for the current roadmap and architecture direction.
+## Architecture / معماری
 
-## Getting Started
+```
+SocialFetch/
+├── socialfetch/
+│   ├── core/           # BaseDownloader, MediaInfo, errors
+│   ├── downloaders/    # Platform implementations (instagram, youtube)
+│   ├── services/       # DownloadOrchestrator, URL parser
+│   ├── storage/        # Local file storage with dedup
+│   └── telegram/       # Telegram bot (handlers, bot)
+├── tests/              # pytest suite (70+ tests)
+├── docs/decisions/     # ADRs (Architecture Decision Records)
+└── run_bot.py          # Entry point
+```
+
+**Pattern:** Adapter pattern — each platform implements `BaseDownloader`, registered via `@DownloaderRegistry.register(platform, url_pattern)`.
+
+---
+
+## Quick Start / راه‌اندازی سریع
+
+### Prerequisites / پیش‌نیازها
+
+```bash
+# System
+python 3.11+
+pip/uv
+git
+ffmpeg              # for video merging
+docker              # for local telegram-bot-api (optional, for 2GB uploads)
+
+# Python packages (installed automatically)
+yt-dlp              # video extraction
+python-telegram-bot # Telegram bot framework
+pydantic-settings   # configuration
+requests            # HTTP (for Instagram API)
+```
+
+### 1. Clone
 
 ```bash
 git clone https://github.com/ErtebateWeb/SocialFetch.git
 cd SocialFetch
-./scripts/bootstrap.sh    # Linux/macOS
-.\scripts\bootstrap.ps1   # Windows
 ```
 
-See [docs/development.md](docs/development.md) for the full development guide.
+### 2. Install / نصب
 
-## Roadmap
+```bash
+# Create virtualenv
+python3 -m venv .venv
+source .venv/bin/activate
 
-See [ROADMAP.md](ROADMAP.md).
+# Install package
+pip install -e .
+```
 
-## Contributing
+### 3. Configure / تنظیمات
 
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a pull request.
+Create `.env` in project root or set environment variables:
 
-## License
+```bash
+# Required
+TELEGRAM_BOT_TOKEN=your_bot_token_from_@BotFather
+
+# Optional: Instagram cookies (for full carousel download)
+# Export cookies from browser (Netscape format) to instagram_cookies.txt
+# Get cookies.txt extension for Chrome: https://chrome.google.com/webstore/detail/get-cookiestxt/bgaddhkoddajcdgocldbbfleckgcbcid
+
+# Optional: Local telegram-bot-api (for 2GB uploads)
+# See "Local API Server" section below
+```
+
+### 4. Run / اجرا
+
+```bash
+# Start bot (polling mode)
+python run_bot.py
+```
+
+---
+
+## Instagram Cookies / کوکی اینستاگرام
+
+Instagram mobile API requires **valid session cookies** for full carousel downloads.
+
+### Setup
+
+1. Install browser extension: [Get cookies.txt](https://chrome.google.com/webstore/detail/get-cookiestxt/bgaddhkoddajcdgocldbbfleckgcbcid) (Chrome) or similar
+2. Log in to **instagram.com** in your browser
+3. Click the extension icon → "Export" → save as `instagram_cookies.txt`
+4. Place the file in the project root
+
+**Security:** This file is in `.gitignore` and will **never** be committed.
+
+### How it works
+- Bot checks if `instagram_cookies.txt` exists with valid `sessionid`
+- **With cookies:** mobile API → full carousel (all images) + WARP proxy
+- **Without cookies:** embed page → 3-4 images, or oEmbed → 1 thumbnail
+
+---
+
+## YouTube / یوتیوب
+
+### Bot Detection / جلوگیری از بلاک
+
+YouTube blocks this VPS IP for bot downloads. Traffic is routed through **WARP SOCKS5 proxy** (`socks5h://127.0.0.1:40000`).
+
+**No additional setup needed** — WARP is pre-configured on the deployment server.
+
+### Quality Auto-Downgrade
+
+When requesting "best" quality, the downloader first peeks at format sizes. If estimated >45MB, it auto-downgrades to 480p to avoid excessive file sizes.
+
+---
+
+## Local Telegram Bot API Server / سرور API لوکال تلگرام
+
+By default, Telegram Bot API limits uploads to **50MB**. Running a local API server increases this to **2000MB (2GB)**.
+
+### Setup
+
+```bash
+# 1. Get API credentials from https://my.telegram.org/apps
+#    You need: API_ID + API_HASH (different from bot token)
+
+# 2. Run Docker container
+docker run --name tba -d --restart=always \
+  -p 127.0.0.1:8081:8081 \
+  -e TELEGRAM_API_ID=YOUR_API_ID \
+  -e TELEGRAM_API_HASH=YOUR_API_HASH \
+  -v /var/lib/telegram-bot-api:/var/lib/telegram-bot-api \
+  aiogram/telegram-bot-api:latest
+
+# 3. Bot automatically detects and uses the local API
+#    (configured in socialfetch/telegram/bot.py)
+```
+
+The bot uses `base_url=http://127.0.0.1:8081/bot` when available.
+
+---
+
+## WARP Proxy / پروکسی WARP
+
+Instagram and YouTube are blocked from this VPS IP. **Cloudflare WARP** (via WireProxy) provides an unblocked tunnel.
+
+Pre-configured on the deployment server:
+- SOCKS5 endpoint: `socks5h://127.0.0.1:40000`
+- Used automatically by Instagram API downloader and yt-dlp
+
+---
+
+## Testing / تست
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run specific
+pytest tests/test_youtube.py -v
+pytest tests/test_instagram.py -v
+
+# Lint & type check
+ruff check socialfetch/ tests/
+mypy socialfetch/
+```
+
+**Current: 70+ tests** — all pass. ✅
+
+---
+
+## Development Workflow / روش توسعه
+
+This project follows a **multi-agent development workflow**:
+
+| Role | Tool | Responsibility |
+|---|---|---|
+| 👤 **Product Owner** | (User) | Approves features, feedback |
+| 🏛 **Architect** | `gcli/grok-4.5-high` | ADRs, architecture decisions |
+| 🐍 **Developer** | `openrouter/qwen3-coder:free` | Implementation |
+| 🧪 **QA** | `gcli/grok-4.5-medium` | Tests |
+| 👁 **Reviewer** | `gcli/grok-4.5` | Code review |
+
+1. ADR-first design → `docs/decisions/`
+2. Role-specific commits with git identity
+3. Sprint-based: develop → PR → squash merge to main
+4. CI: format → lint → test → typecheck
+
+---
+
+## Architecture Decisions / تصمیمات معماری
+
+See [docs/decisions/](docs/decisions/) for all ADRs.
+
+| # | Title | Status |
+|---|---|---|
+| 0013 | Instagram Photo Fallback | ✅ |
+| 0014 | YouTube Downloader (yt-dlp adapter) | ✅ |
+
+---
+
+## Roadmap / نقشه راه
+
+- [x] Instagram downloader (video, photo, carousel)
+- [x] YouTube downloader (video, shorts, playlists)
+- [ ] TikTok downloader
+- [ ] X/Twitter downloader
+- [ ] REST API
+- [ ] Docker Compose deployment
+- [ ] Web UI
+
+---
+
+## License / مجوز
 
 MIT License. See [LICENSE](LICENSE).
+
+---
+
+## Support / پشتیبانی
+
+- Telegram: [@EW_SocialFetcher_bot](https://t.me/EW_SocialFetcher_bot)
+- GitHub Issues: [ErtebateWeb/SocialFetch](https://github.com/ErtebateWeb/SocialFetch/issues)
