@@ -1,4 +1,5 @@
 """REST API server for SocialFetch using FastAPI."""
+
 import logging
 from pathlib import Path
 
@@ -15,14 +16,14 @@ orchestrator = DownloadOrchestrator()
 
 
 @app.get("/health")
-async def health():
+async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
 @app.get("/download")
 async def api_download(
     url: str = Query(..., description="Social media URL to download"),
-):
+) -> dict[str, object]:
     """Download media from a social media URL.
 
     Returns JSON with media info + file(s) as temporary links.
@@ -55,7 +56,7 @@ async def api_download(
 
 
 @app.get("/file/{filename:path}")
-async def serve_file(filename: str):
+async def serve_file(filename: str) -> FileResponse:
     """Serve a downloaded file by filename."""
     path = Path("downloads") / filename
     if not path.exists():
