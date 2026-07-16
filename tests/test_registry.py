@@ -1,15 +1,16 @@
 """Tests for the DownloaderRegistry."""
 
+import re
+
 import pytest
-from socialfetch.downloaders.registry import DownloaderRegistry
-from socialfetch.core.interfaces import BaseDownloader
+
 from socialfetch.core.errors import InvalidURLError
+from socialfetch.core.interfaces import BaseDownloader
 from socialfetch.core.models import DownloadRequest, MediaInfo
+from socialfetch.downloaders.registry import DownloaderRegistry
 
 
-class DummyDownloader(BaseDownloader):
-    """Minimal downloader used for registry tests."""
-
+class _DummyDl(BaseDownloader):
     @property
     def platform(self) -> str:
         return "dummy"
@@ -26,22 +27,15 @@ class TestDownloaderRegistry:
         DownloaderRegistry._entries.clear()
 
     def test_register_and_resolve(self) -> None:
-        @DownloaderRegistry.register("dummy", r"example\.com/test")
-        class _(BaseDownloader):
-            @property
-            def platform(self) -> str:
-                return "dummy"
-
-            async def download(self, request: DownloadRequest) -> MediaInfo:
-                msg = "Not implemented"
-                raise NotImplementedError(msg)
-
+        DownloaderRegistry._entries.append(
+            ("dummy", re.compile(r"example\.com/test"), _DummyDl),
+        )
         cls = DownloaderRegistry.resolve("https://example.com/test/123")
-        assert cls is _
+        assert cls is _DummyDl
 
     def test_register_via_decorator(self) -> None:
         @DownloaderRegistry.register("instagram", r"instagram\.com/(p|reel|tv)/")
-        class _(BaseDownloader):
+        class _InstaDl(BaseDownloader):
             @property
             def platform(self) -> str:
                 return "instagram"
@@ -51,7 +45,7 @@ class TestDownloaderRegistry:
                 raise NotImplementedError(msg)
 
         cls = DownloaderRegistry.resolve("https://instagram.com/p/ABC123/")
-        assert cls is _
+        assert cls is _InstaDl
 
     def test_resolve_no_match_raises(self) -> None:
         with pytest.raises(InvalidURLError):
@@ -59,7 +53,7 @@ class TestDownloaderRegistry:
 
     def test_list_platforms(self) -> None:
         @DownloaderRegistry.register("alpha", r"alpha\.com")
-        class _(BaseDownloader):
+        class _AlphaDl(BaseDownloader):
             @property
             def platform(self) -> str:
                 return "alpha"
@@ -68,7 +62,7 @@ class TestDownloaderRegistry:
                 raise NotImplementedError
 
         @DownloaderRegistry.register("beta", r"beta\.com")
-        class __(BaseDownloader):
+        class _BetaDl(BaseDownloader):
             @property
             def platform(self) -> str:
                 return "beta"

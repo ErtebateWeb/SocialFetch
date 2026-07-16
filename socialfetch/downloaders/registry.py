@@ -1,11 +1,12 @@
 """Central registry that maps platform identifiers to downloader classes."""
 
 import re
-from typing import ClassVar
+from collections.abc import Callable
+from typing import Any, ClassVar
 
-from socialfetch.core.types import PlatformName
 from socialfetch.core.errors import InvalidURLError
 from socialfetch.core.interfaces import BaseDownloader
+from socialfetch.core.types import PlatformName
 
 
 class DownloaderRegistry:
@@ -18,12 +19,12 @@ class DownloaderRegistry:
             ...
     """
 
-    _entries: ClassVar[list[tuple[PlatformName, "re.Pattern", type[BaseDownloader]]]] = []
+    _entries: ClassVar[
+        list[tuple[PlatformName, "re.Pattern[str]", type[BaseDownloader]]]
+    ] = []
 
     @classmethod
-    def register(
-        cls, platform: PlatformName, url_pattern: str
-    ) -> callable:
+    def register(cls, platform: PlatformName, url_pattern: str) -> Callable[..., Any]:
         """Register a downloader class for *platform*."""
         compiled = re.compile(url_pattern, re.IGNORECASE)
 

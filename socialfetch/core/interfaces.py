@@ -1,6 +1,7 @@
 """Abstract base classes for the SocialFetch downloader framework."""
 
 from abc import ABC, abstractmethod
+
 from socialfetch.core.models import DownloadRequest, MediaInfo
 from socialfetch.core.types import PlatformName
 

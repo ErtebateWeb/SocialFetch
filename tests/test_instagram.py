@@ -49,6 +49,7 @@ class TestInstagramShortcodeExtraction:
             request = DownloadRequest(url="https://example.com/not-instagram")
             # Create event loop for async call
             import asyncio
+
             asyncio.run(self.downloader.download(request))
 
 

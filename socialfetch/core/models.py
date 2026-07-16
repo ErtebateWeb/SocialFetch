@@ -3,7 +3,6 @@
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any
 
 from socialfetch.core.types import JSONDict, PlatformName
 

@@ -1,6 +1,5 @@
 """Instagram downloader implementation."""
 
-import json
 import logging
 import os
 import shutil
@@ -88,7 +87,9 @@ class InstagramDownloader(BaseDownloader):
                     likes=info.get("like_count", 0),
                     comments=info.get("comment_count", 0),
                     views=info.get("view_count", 0),
-                    duration_seconds=info.get("duration"),
+                    duration_seconds=(
+                        float(info["duration"]) if info.get("duration") else None
+                    ),
                     raw=info,
                 ),
             )
@@ -126,9 +127,9 @@ class InstagramDownloader(BaseDownloader):
         shortcode: str,
         temp_dir: Path,
         request: DownloadRequest,
-    ) -> dict:
+    ) -> dict[str, object]:  # type: ignore[syntax]
         """Execute yt-dlp download and return extracted info."""
-        ydl_opts: dict = {
+        ydl_opts: dict[str, object] = {
             "outtmpl": str(temp_dir / "%(title)s.%(ext)s"),
             "quiet": True,
             "no_warnings": True,
@@ -148,7 +149,7 @@ class InstagramDownloader(BaseDownloader):
             ydl_opts["cookiefile"] = str(cookie_file)
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+            info = ydl.extract_info(url, download=True)  # type: ignore[return-value]
             if info is None:
                 msg = "yt-dlp returned no info"
                 raise DownloadError(msg)
@@ -167,9 +168,7 @@ class InstagramDownloader(BaseDownloader):
 
         return files
 
-    def _detect_media_type(
-        self, info: dict, files: list[Path]
-    ) -> MediaType:
+    def _detect_media_type(self, info: dict, files: list[Path]) -> MediaType:
         """Determine the MediaType from yt-dlp info and downloaded files."""
         if info.get("is_live"):
             return MediaType.STORY

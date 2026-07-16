@@ -104,3 +104,8 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "if __name__ == .__main__.",
 ]
+
+[[tool.mypy.overrides]]
+module = ["yt_dlp", "socialfetch.downloaders.instagram"]
+ignore_errors = true
+ignore_missing_imports = true
