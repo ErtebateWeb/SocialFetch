@@ -1,6 +1,7 @@
 """Message handlers for the SocialFetch Telegram bot."""
-
 import logging
+import shutil
+import subprocess as sp
 from pathlib import Path
 
 from telegram import Update
@@ -17,40 +18,28 @@ INSTAGRAM_PATTERN = r"(?:https?://)?(?:www\.)?instagram\.com/(?:p|reel|tv|storie
 YOUTUBE_PATTERN = r"(?:https?://)?(?:www\.)?(?:youtube\.com|youtu\.be)/\S+"
 TIKTOK_PATTERN = r"(?:https?://)?(?:www\.)?tiktok\.com/\S+"
 
-# Telegram media caption hard limit
 _CAPTION_LIMIT = 1024
 
 
 def format_media_caption(media: MediaInfo, source_url: str | None = None) -> str:
-    """Build a Telegram caption like classic Instagram bots.
-
-    Includes author, post caption, and optional source link.
-    Truncates to Telegram's 1024-character media caption limit.
-    """
     parts: list[str] = []
     author = (media.author or "").strip()
     caption = (media.caption or "").strip()
     url = (source_url or media.url or "").strip()
 
     if author:
-        # Instagram-style handle when author has no @
         handle = author if author.startswith("@") else f"@{author}"
         parts.append(handle)
-
     if caption:
         parts.append(caption)
-
     if url:
         parts.append(f"🔗 {url}")
 
     text = "\n\n".join(parts).strip()
     if not text:
         return ""
-
     if len(text) <= _CAPTION_LIMIT:
         return text
-
-    # Prefer keeping author + start of caption; drop URL first if needed
     suffix = "…"
     budget = _CAPTION_LIMIT - len(suffix)
     return text[:budget].rstrip() + suffix
@@ -110,45 +99,13 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             size_mb = path.stat().st_size / (1024 * 1024)
 
             if size_mb > 49:
-                # Try compress with ffmpeg to fit under 50MB
-                compressed = path.with_suffix(".compressed.mp4")
-                try:
-                    import subprocess as sp
-                    # Target ~45MB for 50MB limit headroom
-                    target_bitrate = int(
-                        45 * 8192 / max(path.stat().st_size / (1024 * 1024), 1)
-                    )
-                    cmd = [
-                        "ffmpeg", "-y", "-i", str(path),
-                        "-c:v", "libx264", "-b:v", f"{target_bitrate}k",
-                        "-c:a", "aac", "-b:a", "128k",
-                        "-movflags", "+faststart",
-                        str(compressed),
-                    ]
-                    sp.run(cmd, capture_output=True, timeout=300)
-                    threshold = 49 * 1024 * 1024
-                    if compressed.exists() and compressed.stat().st_size < threshold:
-                        with compressed.open("rb") as f:
-                            await update.message.reply_video(
-                                video=f,
-                                caption=file_caption,
-                                supports_streaming=True,
-                            )
-                        compressed.unlink()
-                        path.unlink()
-                        continue
-                except Exception:
-                    pass
-                finally:
-                    if compressed.exists():
-                        compressed.unlink()
-
-                # Compression failed — send source link as last resort
+                sent = await _send_large_file(update, path, file_caption)
+                if sent:
+                    path.unlink(missing_ok=True)
+                    continue
+                # Fallback — plain text
                 await update.message.reply_text(
-                    f"⚠️ File too large ({size_mb:.0f}MB)\n"
-                    f"🔗 [Open in YouTube]({result.url})",
-                    parse_mode=ParseMode.MARKDOWN,
-                    disable_web_page_preview=True,
+                    f"⚠️ Could not send file ({size_mb:.0f}MB)"
                 )
                 continue
 
@@ -160,7 +117,11 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                         supports_streaming=True,
                     )
                 else:
-                    await update.message.reply_photo(photo=f, caption=file_caption)
+                    await update.message.reply_photo(
+                        photo=f, caption=file_caption
+                    )
+
+            path.unlink(missing_ok=True)
 
         await status_msg.delete()
 
@@ -169,7 +130,77 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await status_msg.edit_text(f"❌ Error: {str(e)[:200]}")
 
 
-def get_handlers() -> list:  # type: ignore[type-arg]
+async def _send_large_file(
+    update: Update, path: Path, caption: str | None
+) -> bool:
+    """Send a file >50MB. Tries compress then split. Returns True if sent."""
+    has_ffmpeg = shutil.which("ffmpeg") is not None
+
+    # 1) Compress with increasing aggression
+    if has_ffmpeg:
+        compressed = path.with_suffix(".compressed.mp4")
+        try:
+            for crf, scale in [(28, None), (32, "720"), (35, "480")]:
+                cmd = [
+                    "ffmpeg", "-y", "-i", str(path),
+                    "-c:v", "libx264", "-preset", "fast",
+                    "-crf", str(crf), "-c:a", "aac", "-b:a", "96k",
+                    "-movflags", "+faststart",
+                ]
+                if scale:
+                    cmd += ["-vf", f"scale={scale}:-2"]
+                cmd.append(str(compressed))
+                sp.run(cmd, capture_output=True, timeout=600)
+                limit = 49 * 1024 * 1024
+                if compressed.exists() and compressed.stat().st_size < limit:
+                    break
+            if compressed.exists() and compressed.stat().st_size < 49 * 1024 * 1024:
+                with compressed.open("rb") as f:
+                    await update.message.reply_video(
+                        video=f, caption=caption, supports_streaming=True,
+                    )
+                compressed.unlink()
+                return True
+        except Exception:
+            pass
+        finally:
+            if compressed.exists():
+                compressed.unlink()
+
+    # 2) Split without re-encode
+    if has_ffmpeg:
+        try:
+            dur_str = sp.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+                capture_output=True, text=True, timeout=30,
+            ).stdout.strip()
+            dur = float(dur_str)
+            size_mb = path.stat().st_size / (1024 * 1024)
+            parts = int(size_mb / 45) + 1
+            seg_dur = dur / parts
+
+            for i in range(parts):
+                seg = path.with_name(f"{path.stem}_part{i+1}{path.suffix}")
+                ss = i * seg_dur
+                sp.run([
+                    "ffmpeg", "-y", "-ss", str(ss), "-i", str(path),
+                    "-t", str(seg_dur), "-c", "copy", str(seg),
+                ], capture_output=True, timeout=300)
+                seg_cap = caption if i == 0 else None
+                with seg.open("rb") as f:
+                    await update.message.reply_video(
+                        video=f, caption=seg_cap, supports_streaming=True,
+                    )
+                seg.unlink(missing_ok=True)
+            return True
+        except Exception:
+            pass
+
+    return False
+
+
+def get_handlers() -> list:
     return [
         CommandHandler("start", cmd_start),
         CommandHandler("help", cmd_help),
