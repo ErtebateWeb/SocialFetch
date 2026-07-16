@@ -15,17 +15,6 @@ authors = [
 dependencies = [
     "yt-dlp>=2025.05.22",
 ]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.4",
-    "pytest-cov>=4.1",
-    "mypy>=1.8",
-    "ruff>=0.3",
-    "black>=24.2",
-    "pre-commit>=3.6",
-]
-
 keywords = [
     "social-media",
     "downloader",
@@ -43,6 +32,16 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Typing :: Typed",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "mypy>=1.8",
+    "ruff>=0.3",
+    "black>=24.2",
+    "pre-commit>=3.6",
 ]
 
 [project.urls]
@@ -85,6 +84,10 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+module = ["yt_dlp", "socialfetch.downloaders.instagram"]
+ignore_errors = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
@@ -104,8 +107,3 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "if __name__ == .__main__.",
 ]
-
-[[tool.mypy.overrides]]
-module = ["yt_dlp", "socialfetch.downloaders.instagram"]
-ignore_errors = true
-ignore_missing_imports = true
