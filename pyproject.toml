@@ -12,6 +12,20 @@ requires-python = ">=3.11"
 authors = [
     { name = "SocialFetch Contributors" },
 ]
+dependencies = [
+    "yt-dlp>=2025.05.22",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "mypy>=1.8",
+    "ruff>=0.3",
+    "black>=24.2",
+    "pre-commit>=3.6",
+]
+
 keywords = [
     "social-media",
     "downloader",
@@ -36,16 +50,6 @@ Homepage = "https://github.com/ErtebateWeb/SocialFetch"
 Repository = "https://github.com/ErtebateWeb/SocialFetch"
 Issues = "https://github.com/ErtebateWeb/SocialFetch/issues"
 Changelog = "https://github.com/ErtebateWeb/SocialFetch/blob/main/CHANGELOG.md"
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.4",
-    "pytest-cov>=4.1",
-    "mypy>=1.8",
-    "ruff>=0.3",
-    "black>=24.2",
-    "pre-commit>=3.6",
-]
 
 [tool.hatch.build.targets.wheel]
 packages = ["socialfetch"]
