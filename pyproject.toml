@@ -93,7 +93,7 @@ disallow_untyped_defs = true
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["yt_dlp", "socialfetch.downloaders.instagram", "socialfetch.config.settings", "telegram", "telegram.ext", "socialfetch.telegram", "socialfetch.telegram.handlers", "socialfetch.telegram.bot"]
+module = ["yt_dlp", "socialfetch.downloaders.instagram", "socialfetch.config.settings", "telegram", "telegram.ext", "socialfetch.telegram", "socialfetch.telegram.handlers", "socialfetch.telegram.bot", "socialfetch.services.api"]
 ignore_errors = true
 
 [tool.pytest.ini_options]
