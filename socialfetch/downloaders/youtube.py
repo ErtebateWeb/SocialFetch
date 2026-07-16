@@ -114,6 +114,7 @@ class YouTubeDownloader(BaseDownloader):
             "quiet": True,
             "no_warnings": True,
             "ignoreerrors": True,
+            "proxy": "socks5h://127.0.0.1:40000",
         }
 
         # Audio-only postprocessing
