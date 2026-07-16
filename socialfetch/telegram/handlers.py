@@ -94,14 +94,6 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         for index, file_path in enumerate(result.saved_paths):
             file_caption = caption if index == 0 else None
             path = Path(file_path)
-            size_mb = path.stat().st_size / (1024 * 1024)
-
-            if size_mb > 49:
-                await update.message.reply_text(
-                    f"⚠️ File too large ({size_mb:.0f}MB > 50MB limit)\n"
-                    f"📄 {path.name}"
-                )
-                continue
 
             with path.open("rb") as f:
                 if path.suffix.lower() in {".mp4", ".webm", ".mkv"}:
@@ -109,8 +101,8 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                         video=f,
                         caption=file_caption,
                         supports_streaming=True,
-                        read_timeout=120,
-                        write_timeout=120,
+                        read_timeout=300,
+                        write_timeout=300,
                     )
                 else:
                     await update.message.reply_photo(

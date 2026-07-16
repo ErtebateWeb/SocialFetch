@@ -12,7 +12,14 @@ logger = logging.getLogger(__name__)
 
 
 def create_bot(token: str) -> Application:
-    app = Application.builder().token(token).post_init(_post_init).build()
+    base_url = "http://127.0.0.1:8081/bot"
+    app = (
+        Application.builder()
+        .token(token)
+        .base_url(base_url)
+        .post_init(_post_init)
+        .build()
+    )
     for handler in get_handlers():
         app.add_handler(handler)
     return app
