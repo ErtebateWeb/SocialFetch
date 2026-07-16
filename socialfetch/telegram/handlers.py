@@ -105,16 +105,28 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         caption = format_media_caption(result.media, source_url=result.url)
 
         for index, file_path in enumerate(result.saved_paths):
-            # Put caption on the first media only (like multi-file albums)
             file_caption = caption if index == 0 else None
             path = Path(file_path)
             size_mb = path.stat().st_size / (1024 * 1024)
+
             if size_mb > 49:
-                await update.message.reply_text(
-                    f"⚠️ File too large for Telegram ({size_mb:.0f}MB — max 50MB)\n"
-                    f"📄 {path.name}"
-                )
+                # Try Document (2GB limit) first, fallback to source link
+                try:
+                    with path.open("rb") as f:
+                        await update.message.reply_document(
+                            document=f,
+                            caption=file_caption,
+                            filename=path.name,
+                        )
+                except Exception:
+                    await update.message.reply_text(
+                        f"⚠️ File too large ({size_mb:.0f}MB)\n"
+                        f"🔗 [Open in YouTube]({result.url})",
+                        parse_mode=ParseMode.MARKDOWN,
+                        disable_web_page_preview=True,
+                    )
                 continue
+
             with path.open("rb") as f:
                 if path.suffix.lower() in {".mp4", ".webm", ".mkv"}:
                     await update.message.reply_video(
