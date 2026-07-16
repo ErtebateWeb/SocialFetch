@@ -142,6 +142,7 @@ async def _send_large_file(
     if has_ffmpeg:
         compressed = path.with_suffix(".compressed.mp4")
         try:
+            orig_size = path.stat().st_size
             for crf, scale in [(28, None), (32, "720"), (35, "480")]:
                 cmd = [
                     "ffmpeg", "-y", "-i", str(path),
@@ -152,10 +153,17 @@ async def _send_large_file(
                 if scale:
                     cmd += ["-vf", f"scale={scale}:-2"]
                 cmd.append(str(compressed))
-                sp.run(cmd, capture_output=True, timeout=600)
-                limit = 49 * 1024 * 1024
-                if compressed.exists() and compressed.stat().st_size < limit:
-                    break
+                sp.run(cmd, capture_output=True, timeout=300)
+                if compressed.exists():
+                    new_size = compressed.stat().st_size
+                    logger.info(
+                        "compress: crf=%s scale=%s %s->%sMB",
+                        crf, scale or "orig",
+                        orig_size // 1024 // 1024,
+                        new_size // 1024 // 1024,
+                    )
+                    if new_size < 49 * 1024 * 1024:
+                        break
             if compressed.exists() and compressed.stat().st_size < 49 * 1024 * 1024:
                 with compressed.open("rb") as f:
                     await update.message.reply_video(
@@ -167,8 +175,8 @@ async def _send_large_file(
                     )
                 compressed.unlink()
                 return True
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error("compress failed: %s", exc)
         finally:
             if compressed.exists():
                 compressed.unlink()
@@ -185,6 +193,7 @@ async def _send_large_file(
             size_mb = path.stat().st_size / (1024 * 1024)
             parts = int(size_mb / 45) + 1
             seg_dur = dur / parts
+            logger.info("splitting %sMB into %s parts", size_mb, parts)
 
             for i in range(parts):
                 seg = path.with_name(f"{path.stem}_part{i+1}{path.suffix}")
@@ -204,8 +213,8 @@ async def _send_large_file(
                     )
                 seg.unlink(missing_ok=True)
             return True
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error("split failed: %s", exc)
 
     return False
 
