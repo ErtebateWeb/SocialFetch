@@ -115,7 +115,38 @@ class YouTubeDownloader(BaseDownloader):
             "no_warnings": True,
             "ignoreerrors": True,
             "proxy": "socks5h://127.0.0.1:40000",
+            "merge_output_format": "mp4",
         }
+
+        # Auto-downgrade quality if file would exceed 50MB
+        if quality in ("best", "best+1080"):
+            # First peek at format sizes without downloading
+            peek_opts: dict[str, object] = {
+                "format": fmt,
+                "quiet": True,
+                "no_warnings": True,
+                "extract_flat": True,
+                "proxy": "socks5h://127.0.0.1:40000",
+            }
+            try:
+                with yt_dlp.YoutubeDL(peek_opts) as ydl:  # type: ignore[arg-type]
+                    peek = ydl.extract_info(url, download=False)
+                if peek:
+                    est_mb = 0
+                    for f in peek.get("formats") or []:
+                        if f.get("filesize"):
+                            est_mb += f["filesize"]
+                        elif f.get("filesize_approx"):
+                            est_mb += f["filesize_approx"]
+                    est_mb = est_mb / (1024 * 1024)
+                    if est_mb > 45:
+                        logger.info(
+                            "Estimated %sMB, downgrading to 480p", est_mb
+                        )
+                        fmt = "bestvideo[height<=480]+bestaudio/best[height<=480]"
+                        ydl_opts["format"] = fmt
+            except Exception:
+                pass
 
         # Audio-only postprocessing
         if quality == "audio-only":
