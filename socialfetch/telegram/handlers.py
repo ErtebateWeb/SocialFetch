@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-from telegram import Update
+from telegram import InputMediaPhoto, InputMediaVideo, Update
 from telegram.constants import ChatAction, ParseMode
 from telegram.ext import CommandHandler, ContextTypes, MessageHandler, filters
 
@@ -92,23 +92,39 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         caption = format_media_caption(result.media, source_url=result.url)
 
-        for index, file_path in enumerate(result.saved_paths):
-            file_caption = caption if index == 0 else None
-            path = Path(file_path)
-
+        # Use album (media group) for multiple files, single for one
+        if len(result.saved_paths) > 1:
+            media_group = []
+            paths = [Path(p) for p in result.saved_paths]
+            files = [p.open("rb") for p in paths]
+            try:
+                for idx, (f, p) in enumerate(zip(files, paths, strict=False)):
+                    cap = caption if idx == 0 else None
+                    if p.suffix.lower() in {".mp4", ".webm", ".mkv"}:
+                        media_group.append(InputMediaVideo(media=f, caption=cap))
+                    else:
+                        media_group.append(InputMediaPhoto(media=f, caption=cap))
+                await update.message.reply_media_group(media_group)
+            finally:
+                for f in files:
+                    f.close()
+        else:
+            path = Path(result.saved_paths[0])
             with path.open("rb") as f:
                 if path.suffix.lower() in {".mp4", ".webm", ".mkv"}:
                     await update.message.reply_video(
                         video=f,
-                        caption=file_caption,
+                        caption=caption,
                         supports_streaming=True,
                         read_timeout=300,
                         write_timeout=300,
                     )
                 else:
-                    await update.message.reply_photo(photo=f, caption=file_caption)
+                    await update.message.reply_photo(photo=f, caption=caption)
 
-            path.unlink(missing_ok=True)
+        # Cleanup all temp files
+        for file_path in result.saved_paths:
+            Path(file_path).unlink(missing_ok=True)
 
         await status_msg.delete()
 
