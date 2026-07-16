@@ -15,7 +15,7 @@ class TestTelegramHandlers:
     def test_get_handlers_returns_list(self) -> None:
         handlers = get_handlers()
         assert isinstance(handlers, list)
-        assert len(handlers) == 3
+        assert len(handlers) == 5
 
     def test_handlers_have_correct_types(self) -> None:
         from telegram.ext import CommandHandler, MessageHandler
@@ -23,7 +23,9 @@ class TestTelegramHandlers:
         handlers = get_handlers()
         assert isinstance(handlers[0], CommandHandler)
         assert isinstance(handlers[1], CommandHandler)
-        assert isinstance(handlers[2], MessageHandler)
+        assert isinstance(handlers[2], CommandHandler)
+        assert isinstance(handlers[3], CommandHandler)
+        assert isinstance(handlers[4], MessageHandler)
 
     def test_create_bot_valid_token(self) -> None:
         app = create_bot("test:token")

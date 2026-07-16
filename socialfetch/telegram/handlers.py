@@ -9,6 +9,13 @@ from telegram.ext import CommandHandler, ContextTypes, MessageHandler, filters
 
 from socialfetch.core.models import MediaInfo
 from socialfetch.services.downloader import DownloadOrchestrator, DownloadResult
+from socialfetch.telegram.ratelimit import (
+    check_limit,
+    generate_referral,
+    increment,
+    remaining,
+    use_referral,
+)
 
 logger = logging.getLogger(__name__)
 orchestrator = DownloadOrchestrator()
@@ -69,8 +76,61 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 
+async def cmd_plan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id if update.effective_user else 0
+    r = remaining(user_id)
+    text = (
+        "**💎 Premium Subscription**\n\n"
+        "Get unlimited access to all features!\n\n"
+        "**Choose your plan:**\n"
+        f"• Free: {r['daily']}/5 daily, {r['monthly']}/75 monthly\n"
+        "   remaining\n"
+        "• Premium: unlimited — contact @ErtebateWeb\n\n"
+        "🎁 Use **/ref** to invite friends and get 7 days of Premium for each referral!"
+    )
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+
+async def cmd_ref(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id if update.effective_user else 0
+    args = context.args
+    if args:
+        code = args[0].strip().upper()
+        result = use_referral(code, user_id)
+        if result.get("ok"):
+            await update.message.reply_text(
+                f"🎉 Referral accepted! "
+                f"Your friend got {result['days']} days of Premium!"
+            )
+        else:
+            await update.message.reply_text(f"❌ {result.get('error')}")
+        return
+
+    code = generate_referral(user_id)
+    await update.message.reply_text(
+        f"**🎁 Your Referral Code**\n\n"
+        f"`{code}`\n\n"
+        "Share this code with friends! Each referral gives you **7 days of Premium**.\n"
+        "Your friend can use it with `/ref {code}`",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
 async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.text:
+        return
+
+    user_id = update.effective_user.id if update.effective_user else 0
+    if not check_limit(user_id):
+        r = remaining(user_id)
+        await update.message.reply_text(
+            "🚫 **Download limit reached**\n\n"
+            f"Free: **{r['daily']}/5 today**, "
+            f"**{r['monthly']}/75 this month**\n\n"
+            "💎 Subscribe to Premium for unlimited access, or\n"
+            "🎁 Use **/ref** to invite friends\n"
+            "and get 7 days of Premium for each referral!"
+        )
         return
 
     url = update.message.text.strip()
@@ -87,6 +147,8 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         if not result.saved_paths:
             await status_msg.edit_text("❌ No files downloaded")
             return
+
+        increment(user_id)
 
         await status_msg.edit_text(f"✅ {len(result.saved_paths)} file(s)! Sending...")
 
@@ -137,6 +199,8 @@ def get_handlers() -> list:
     return [
         CommandHandler("start", cmd_start),
         CommandHandler("help", cmd_help),
+        CommandHandler("plan", cmd_plan),
+        CommandHandler("ref", cmd_ref),
         MessageHandler(
             filters.TEXT
             & ~filters.COMMAND
