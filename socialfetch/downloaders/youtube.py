@@ -112,7 +112,8 @@ class YouTubeDownloader(BaseDownloader):
         self, url: str, temp_dir: Path, request: DownloadRequest
     ) -> dict[str, object]:
         """Execute yt-dlp and return extracted info."""
-        quality: str = request.extra.get("quality", "best")  # type: ignore[assignment]
+        # Default 1080p — local Bot API supports up to 2GB
+        quality: str = request.extra.get("quality", "best+1080")  # type: ignore[assignment]
         fmt = self._get_format(quality)
 
         ydl_opts: dict[str, object] = {
@@ -125,35 +126,6 @@ class YouTubeDownloader(BaseDownloader):
             # android client bypasses "Sign in to confirm you're not a bot"
             "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
         }
-
-        # Auto-downgrade quality if file would exceed 45MB
-        if quality == "best":
-            try:
-                peek_opts: dict[str, object] = {
-                    "format": fmt,
-                    "quiet": True,
-                    "no_warnings": True,
-                    "proxy": settings.proxy_url or "",
-                    "extractor_args": {
-                        "youtube": {"player_client": ["android", "web"]}
-                    },
-                }
-                with yt_dlp.YoutubeDL(peek_opts) as ydl:
-                    peek = ydl.extract_info(url, download=False)
-                if peek:
-                    est_mb: float = 0
-                    for f in peek.get("formats") or []:
-                        if f.get("filesize"):
-                            est_mb += f["filesize"]
-                        elif f.get("filesize_approx"):
-                            est_mb += f["filesize_approx"]
-                    est_mb = est_mb / (1024 * 1024)
-                    if est_mb > 45:
-                        logger.info("Estimated %sMB, downgrading to 480p", est_mb)
-                        fmt = "bestvideo[height<=480]+bestaudio/best[height<=480]"
-                        ydl_opts["format"] = fmt
-            except Exception:
-                pass
 
         # Audio-only postprocessing
         if quality == "audio-only":
@@ -175,8 +147,8 @@ class YouTubeDownloader(BaseDownloader):
         if request.cookies_file and request.cookies_file.exists():
             ydl_opts["cookiefile"] = str(request.cookies_file)
 
-        # ffmpeg check
-        if quality != "best" and shutil.which("ffmpeg") is None:
+        # ffmpeg needed for video+audio merge (1080p/480p/best)
+        if quality != "audio-only" and shutil.which("ffmpeg") is None:
             logger.warning("ffmpeg not found — video+audio merge may fail")
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
