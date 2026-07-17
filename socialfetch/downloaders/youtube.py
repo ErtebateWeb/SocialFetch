@@ -89,10 +89,16 @@ class YouTubeDownloader(BaseDownloader):
             if "age" in error_text or "restricted" in error_text:
                 msg = "Age-restricted video. Use cookies_file in DownloadRequest."
                 raise DownloadError(msg) from e
-            if "sign in" in error_text or "not a bot" in error_text:
-                raise DownloadError(
-                    "YouTube bot check. Retry later or add cookies."
-                ) from e
+            bot_check = ("sign in" in error_text or "not a bot" in error_text)
+            if bot_check and not request.extra.get("_fallback_android"):
+                logger.info("Bot check hit, retrying with android client")
+                req = DownloadRequest(
+                    url=request.url,
+                    output_dir=request.output_dir,
+                    extra={**request.extra, "_fallback_android": True},
+                    cookies_file=request.cookies_file,
+                )
+                return await self.download(req)
             raise DownloadError(str(e)) from e
         except OSError as e:
             raise DownloadError(str(e)) from e
@@ -123,9 +129,15 @@ class YouTubeDownloader(BaseDownloader):
             "no_warnings": True,
             "proxy": settings.proxy_url or "",
             "merge_output_format": "mp4",
-            # android client bypasses "Sign in to confirm you're not a bot"
-            "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+            # js_runtimes needed for full format extraction on some videos
+            "js_runtimes": {"node": {"path": "/root/.hermes/node/bin/node"}},
         }
+
+        # Try default client first, fall back to android if bot-check
+        if request.extra.get("_fallback_android"):
+            ydl_opts["extractor_args"] = {
+                "youtube": {"player_client": ["android", "web"]}
+            }
 
         # Audio-only postprocessing
         if quality == "audio-only":
