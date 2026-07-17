@@ -89,6 +89,10 @@ class YouTubeDownloader(BaseDownloader):
             if "age" in error_text or "restricted" in error_text:
                 msg = "Age-restricted video. Use cookies_file in DownloadRequest."
                 raise DownloadError(msg) from e
+            if "sign in" in error_text or "not a bot" in error_text:
+                raise DownloadError(
+                    "YouTube bot check. Retry later or add cookies."
+                ) from e
             raise DownloadError(str(e)) from e
         except OSError as e:
             raise DownloadError(str(e)) from e
@@ -116,9 +120,10 @@ class YouTubeDownloader(BaseDownloader):
             "outtmpl": str(temp_dir / "%(id)s.%(ext)s"),
             "quiet": True,
             "no_warnings": True,
-            "ignoreerrors": True,
             "proxy": settings.proxy_url or "",
             "merge_output_format": "mp4",
+            # android client bypasses "Sign in to confirm you're not a bot"
+            "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
         }
 
         # Auto-downgrade quality if file would exceed 45MB
@@ -129,6 +134,9 @@ class YouTubeDownloader(BaseDownloader):
                     "quiet": True,
                     "no_warnings": True,
                     "proxy": settings.proxy_url or "",
+                    "extractor_args": {
+                        "youtube": {"player_client": ["android", "web"]}
+                    },
                 }
                 with yt_dlp.YoutubeDL(peek_opts) as ydl:
                     peek = ydl.extract_info(url, download=False)
