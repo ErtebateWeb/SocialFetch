@@ -1,4 +1,5 @@
 """Spotify downloader using spotdl CLI."""
+
 from __future__ import annotations
 
 import asyncio
@@ -74,9 +75,12 @@ class SpotifyDownloader(BaseDownloader):
         cmd = [
             "spotdl",
             url,
-            "--output", f"{output_dir}/{{artists}} - {{title}}.{{output-ext}}",
-            "--format", "opus",
-            "--overwrite", "skip",
+            "--output",
+            f"{output_dir}/{{artists}} - {{title}}.{{output-ext}}",
+            "--format",
+            "opus",
+            "--overwrite",
+            "skip",
         ]
         if http_proxy:
             cmd.extend(["--proxy", http_proxy])

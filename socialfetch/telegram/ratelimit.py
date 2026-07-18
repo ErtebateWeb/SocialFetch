@@ -22,7 +22,8 @@ def _get_db() -> sqlite3.Connection:
         return _conn
     _conn = sqlite3.connect(str(DB))
     _conn.execute("PRAGMA journal_mode=WAL")
-    _conn.execute("""
+    _conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS usage (
             user_id INTEGER NOT NULL,
             date TEXT NOT NULL,   -- YYYY-MM-DD
@@ -31,21 +32,25 @@ def _get_db() -> sqlite3.Connection:
             premium_until REAL DEFAULT 0,  -- unix ts, 0 = none
             PRIMARY KEY (user_id, date, month)
         )
-    """)
-    _conn.execute("""
+    """
+    )
+    _conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS referrals (
             code TEXT PRIMARY KEY,
             owner_id INTEGER NOT NULL,
             used_by INTEGER DEFAULT NULL,
             created REAL DEFAULT (unixepoch())
         )
-    """)
+    """
+    )
     _conn.commit()
     return _conn
 
 
 def _ensure_user(user_id: int) -> tuple[str, str]:
     import datetime
+
     now = datetime.datetime.utcnow()
     date = now.strftime("%Y-%m-%d")
     month = now.strftime("%Y-%m")
@@ -72,6 +77,7 @@ def remaining(user_id: int) -> dict:
     _ensure_user(user_id)
     db = _get_db()
     import datetime
+
     now = datetime.datetime.utcnow()
     date = now.strftime("%Y-%m-%d")
     month = now.strftime("%Y-%m")
@@ -106,6 +112,7 @@ def increment(user_id: int) -> None:
     _ensure_user(user_id)
     db = _get_db()
     import datetime
+
     now = datetime.datetime.utcnow()
     date = now.strftime("%Y-%m-%d")
     month = now.strftime("%Y-%m")

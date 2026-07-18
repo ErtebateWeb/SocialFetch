@@ -89,7 +89,7 @@ class YouTubeDownloader(BaseDownloader):
             if "age" in error_text or "restricted" in error_text:
                 msg = "Age-restricted video. Use cookies_file in DownloadRequest."
                 raise DownloadError(msg) from e
-            bot_check = ("sign in" in error_text or "not a bot" in error_text)
+            bot_check = "sign in" in error_text or "not a bot" in error_text
             if bot_check and not request.extra.get("_fallback_android"):
                 logger.info("Bot check hit, retrying with android client")
                 req = DownloadRequest(

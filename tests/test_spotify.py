@@ -1,4 +1,5 @@
 """Tests for the Spotify downloader."""
+
 from pathlib import Path
 
 import pytest
@@ -20,8 +21,10 @@ class TestSpotifyDownloader:
         [
             (_BASE, "4cOdK2wGLETKBW3PvgPWqT"),
             (_BASE.replace("track", "album"), "4cOdK2wGLETKBW3PvgPWqT"),
-            ("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
-             "37i9dQZF1DXcBWIGoYBM5M"),
+            (
+                "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+                "37i9dQZF1DXcBWIGoYBM5M",
+            ),
             ("https://open.spotify.com/episode/abc123", "abc123"),
             ("https://spotify.com/track/abc123", "abc123"),
             ("https://open.spotify.com/show/xyz789", "xyz789"),

@@ -160,7 +160,7 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             paths = [Path(p) for p in result.saved_paths]
             # Telegram album limit is 10; batch if more
             for batch_start in range(0, len(paths), 10):
-                batch_paths = paths[batch_start:batch_start + 10]
+                batch_paths = paths[batch_start : batch_start + 10]
                 files = [p.open("rb") for p in batch_paths]
                 try:
                     media_group = []
