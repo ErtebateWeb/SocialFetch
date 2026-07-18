@@ -157,20 +157,24 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         # Use album (media group) for multiple files, single for one
         if len(result.saved_paths) > 1:
-            media_group = []
             paths = [Path(p) for p in result.saved_paths]
-            files = [p.open("rb") for p in paths]
-            try:
-                for idx, (f, p) in enumerate(zip(files, paths, strict=False)):
-                    cap = caption if idx == 0 else None
-                    if p.suffix.lower() in {".mp4", ".webm", ".mkv"}:
-                        media_group.append(InputMediaVideo(media=f, caption=cap))
-                    else:
-                        media_group.append(InputMediaPhoto(media=f, caption=cap))
-                await update.message.reply_media_group(media_group)
-            finally:
-                for f in files:
-                    f.close()
+            # Telegram album limit is 10; batch if more
+            for batch_start in range(0, len(paths), 10):
+                batch_paths = paths[batch_start:batch_start + 10]
+                files = [p.open("rb") for p in batch_paths]
+                try:
+                    media_group = []
+                    base_idx = batch_start
+                    for idx, (f, p) in enumerate(zip(files, batch_paths, strict=False)):
+                        cap = caption if (base_idx + idx) == 0 else None
+                        if p.suffix.lower() in {".mp4", ".webm", ".mkv"}:
+                            media_group.append(InputMediaVideo(media=f, caption=cap))
+                        else:
+                            media_group.append(InputMediaPhoto(media=f, caption=cap))
+                    await update.message.reply_media_group(media_group)
+                finally:
+                    for f in files:
+                        f.close()
         else:
             path = Path(result.saved_paths[0])
             with path.open("rb") as f:
