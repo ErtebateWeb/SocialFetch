@@ -13,6 +13,7 @@
 |---|---|---|
 | **Instagram** | ✅ | Reels, Videos, Photos, Carousels, Captions |
 | **YouTube** | ✅ | Videos, Shorts, Playlists, Audio-only |
+| **Spotify** | ✅ | Tracks, Albums, Playlists (opus/mp3) |
 | **TikTok** | 🚧 | Planned |
 | **X / Twitter** | 🚧 | Planned |
 
@@ -28,13 +29,19 @@
 - Quality: `best`, `best+1080`, `best+480`, `audio-only`
 - Subtitles (optional, English)
 - **WARP proxy** to bypass bot detection
-- Auto-downgrade quality if estimated file > 45MB
+- Auto-fallback: android client if bot check triggered
 - Forced **mp4** output for Telegram inline playback
+
+### Spotify
+- **Tracks, Albums, Playlists, Episodes, Shows** via spotdl
+- Finds matching YouTube Music video → downloads as **opus** audio
+- Full metadata: artist, title, album art embedded
+- Requires **Deno** runtime (auto-downloaded on first use)
 
 ### Telegram Bot
 - `@EW_SocialFetcher_bot` — paste a link, get media
 - Local `telegram-bot-api` server (Docker) — **2GB upload limit**
-- Multi-file carousels sent as album with caption on first
+- Multi-file carousels sent as album with caption on first (batched 10 per group)
 - Large files sent inline as mp4 video
 
 ---
@@ -45,11 +52,11 @@
 SocialFetch/
 ├── socialfetch/
 │   ├── core/           # BaseDownloader, MediaInfo, errors
-│   ├── downloaders/    # Platform implementations (instagram, youtube)
+│   ├── downloaders/    # Platform implementations (instagram, youtube, spotify)
 │   ├── services/       # DownloadOrchestrator, URL parser
 │   ├── storage/        # Local file storage with dedup
 │   └── telegram/       # Telegram bot (handlers, bot)
-├── tests/              # pytest suite (70+ tests)
+├── tests/              # pytest suite (84+ tests)
 ├── docs/decisions/     # ADRs (Architecture Decision Records)
 └── run_bot.py          # Entry point
 ```
@@ -72,6 +79,7 @@ docker              # for local telegram-bot-api (optional, for 2GB uploads)
 
 # Python packages (installed automatically)
 yt-dlp              # video extraction
+spotdl              # Spotify download (includes Deno runtime)
 python-telegram-bot # Telegram bot framework
 pydantic-settings   # configuration
 requests            # HTTP (for Instagram API)
@@ -148,9 +156,33 @@ YouTube blocks this VPS IP for bot downloads. Traffic is routed through **WARP S
 
 **No additional setup needed** — WARP is pre-configured on the deployment server.
 
-### Quality Auto-Downgrade
+### Auto-Fallback Quality
 
-When requesting "best" quality, the downloader first peeks at format sizes. If estimated >45MB, it auto-downgrades to 480p to avoid excessive file sizes.
+When "Sign in" / "not a bot" is detected, downloader auto-fallsback to android client for reliable download (may get lower quality on some videos).
+
+---
+
+## Spotify / اسپاتیفای
+
+### How it works
+
+1. Receive Spotify link (track, album, playlist, episode, show)
+2. spotdl finds matching song on YouTube Music
+3. Downloads as **opus** audio (≈3-4MB per track, good quality)
+4. Sends as voice/audio file to Telegram
+
+### Requirements
+
+- **Deno** runtime — auto-downloaded on first `spotdl` use to `~/.config/spotdl/deno`
+- No Spotify API credentials needed (uses YouTube Music metadata)
+
+### Usage
+
+Just paste any Spotify link:
+
+- `https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT`
+- `https://open.spotify.com/album/...`
+- `https://open.spotify.com/playlist/...`
 
 ---
 
@@ -176,8 +208,6 @@ docker run --name tba -d --restart=always \
 #    (configured in socialfetch/telegram/bot.py)
 ```
 
-The bot uses `base_url=http://127.0.0.1:8081/bot` when available.
-
 ---
 
 ## WARP Proxy / پروکسی WARP
@@ -186,7 +216,21 @@ Instagram and YouTube are blocked from this VPS IP. **Cloudflare WARP** (via Wir
 
 Pre-configured on the deployment server:
 - SOCKS5 endpoint: `socks5h://127.0.0.1:40000`
-- Used automatically by Instagram API downloader and yt-dlp
+- Used automatically by Instagram API downloader, yt-dlp, and spotdl
+
+---
+
+## Rate Limit & Referral / محدودیت و معرفی
+
+Built-in rate limiting per user:
+- **5 downloads/day** (free tier)
+- **75 downloads/month** (free tier)
+- **Referral system:** `/ref` gives a code, each invite = 7 days Premium
+
+### Commands
+- `/plan` — your current download usage
+- `/ref` — get/generate referral code
+- `/ref YOUR_CODE` — accept a referral
 
 ---
 
@@ -199,13 +243,14 @@ pytest tests/
 # Run specific
 pytest tests/test_youtube.py -v
 pytest tests/test_instagram.py -v
+pytest tests/test_spotify.py -v
 
 # Lint & type check
 ruff check socialfetch/ tests/
 mypy socialfetch/
 ```
 
-**Current: 70+ tests** — all pass. ✅
+**Current: 84+ tests** — all pass. ✅
 
 ---
 
@@ -243,6 +288,7 @@ See [docs/decisions/](docs/decisions/) for all ADRs.
 
 - [x] Instagram downloader (video, photo, carousel)
 - [x] YouTube downloader (video, shorts, playlists)
+- [x] Spotify downloader (tracks, albums, playlists)
 - [ ] TikTok downloader
 - [ ] X/Twitter downloader
 - [ ] REST API
