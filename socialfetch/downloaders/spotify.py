@@ -73,7 +73,9 @@ class SpotifyDownloader(BaseDownloader):
         if raw and ("socks5" not in raw):
             http_proxy = raw
 
-        spotdl_bin = shutil.which("spotdl") or "/usr/local/lib/hermes-agent/venv/bin/spotdl"
+        spotdl_bin = (
+            shutil.which("spotdl") or "/usr/local/lib/hermes-agent/venv/bin/spotdl"
+        )
         cmd = [
             spotdl_bin,
             url,
