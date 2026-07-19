@@ -23,6 +23,9 @@ orchestrator = DownloadOrchestrator()
 INSTAGRAM_PATTERN = r"(?:https?://)?(?:www\.)?instagram\.com/(?:p|reel|tv|stories)/\S+"
 YOUTUBE_PATTERN = r"(?:https?://)?(?:www\.)?(?:youtube\.com|youtu\.be)/\S+"
 TIKTOK_PATTERN = r"(?:https?://)?(?:www\.)?tiktok\.com/\S+"
+SPOTIFY_PATTERN = (
+    r"(?:https?://)?(?:open\.)?spotify\.com/(?:track|album|playlist|episode|show)/\S+"
+)
 
 _CAPTION_LIMIT = 1024
 
@@ -178,13 +181,23 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         else:
             path = Path(result.saved_paths[0])
             with path.open("rb") as f:
-                if path.suffix.lower() in {".mp4", ".webm", ".mkv"}:
+                suffix = path.suffix.lower()
+                if suffix in {".mp4", ".webm", ".mkv"}:
                     await update.message.reply_video(
                         video=f,
                         caption=caption,
                         supports_streaming=True,
                         read_timeout=300,
                         write_timeout=300,
+                    )
+                elif suffix in {".opus", ".mp3", ".ogg", ".m4a", ".flac", ".wav"}:
+                    await update.message.reply_audio(
+                        audio=f,
+                        caption=caption,
+                        read_timeout=300,
+                        write_timeout=300,
+                        performer=result.media.author or None,
+                        title=result.media.caption or None,
                     )
                 else:
                     await update.message.reply_photo(photo=f, caption=caption)
@@ -213,6 +226,7 @@ def get_handlers() -> list:
                 filters.Regex(INSTAGRAM_PATTERN)
                 | filters.Regex(YOUTUBE_PATTERN)
                 | filters.Regex(TIKTOK_PATTERN)
+                | filters.Regex(SPOTIFY_PATTERN)
             ),
             handle_url,
         ),
