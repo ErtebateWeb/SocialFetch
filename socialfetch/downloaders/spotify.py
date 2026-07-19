@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import shutil
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -72,8 +73,9 @@ class SpotifyDownloader(BaseDownloader):
         if raw and ("socks5" not in raw):
             http_proxy = raw
 
+        spotdl_bin = shutil.which("spotdl") or "/usr/local/lib/hermes-agent/venv/bin/spotdl"
         cmd = [
-            "spotdl",
+            spotdl_bin,
             url,
             "--output",
             f"{output_dir}/{{artists}} - {{title}}.{{output-ext}}",
