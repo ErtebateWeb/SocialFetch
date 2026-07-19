@@ -85,32 +85,146 @@ def _file_id_from_url(url: str) -> str:
 def _parse_embed_image_urls(html: str) -> list[str]:
     """Extract unique post image URLs from Instagram embed HTML.
 
-    Strategy: collect all CDN scontent URLs, deduplicate by file ID,
-    then skip the first one if it appears >1 time (profile pic).
-    Returns deduplicated image URLs in order.
+    Strategy:
+    1. Find the embedded JSON containing graphql data
+    2. Parse it to extract all display_url values from carousel children
+    3. Falls back to raw scontent URL extraction if JSON parsing fails
     """
-    all_imgs = re.findall(r'(https://scontent[^"\\]+\.jpg[^"\\]*)', html)
-    if not all_imgs:
+    urls: list[str] = []
+
+    # Try to extract from embedded JSON data
+    for marker in ("edge_sidecar_to_children", "shortcode_media", "display_url"):
+        idx = html.find(marker)
+        if idx < 0:
+            continue
+
+        if marker == "edge_sidecar_to_children":
+            idx = html.find(":", idx) + 1
+            # Find the matching } or ] for this JSON value
+            data = _extract_json_value(html, idx)
+            if data:
+                decoded = _decode_escaped_json(data)
+                children = _get_carousel_urls(decoded)
+                if children:
+                    urls = children
+                    break
+
+    # Fallback: raw scontent URLs
+    if not urls:
+        raw = re.findall(
+            r'(https://scontent[^"\\\\]+\.(?:jpg|png|webp)[^"\\\\]*)', html
+        )
+        seen: set[str] = set()
+        for img in raw:
+            if "/v/t51.82787-19/" in img or "/v/t51.2885-19/" in img:
+                continue
+            fid_match = re.search(r"/(\d{6,}_[^/]+?)_n\.", img)
+            fid = fid_match.group(1) if fid_match else img.split("?")[0]
+            if fid and fid not in seen:
+                seen.add(fid)
+                url = img.split("  ")[0].strip().rstrip(",").replace("&amp;", "&")
+                urls.append(url)
+
+    # Deduplicate
+    seen_urls: set[str] = set()
+    deduped: list[str] = []
+    for u in urls:
+        if u and u not in seen_urls:
+            seen_urls.add(u)
+            deduped.append(u)
+    return deduped
+
+
+def _extract_json_value(html: str, start: int) -> str | None:
+    """Extract a JSON value starting at *start*, handling escaped strings."""
+    # Skip whitespace
+    while start < len(html) and html[start] in " \t\r\n":
+        start += 1
+    if start >= len(html):
+        return None
+
+    first = html[start]
+    if first not in ("{", "["):
+        return None
+
+    depth = 0
+    in_str = False
+    escape = False
+    end = start
+    for i in range(start, min(start + 200000, len(html))):
+        ch = html[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"' and not escape:
+            in_str = not in_str
+            continue
+        if in_str:
+            continue
+        if ch in ("{", "["):
+            depth += 1
+        elif ch in ("}", "]"):
+            depth -= 1
+            if depth <= 0:
+                end = i + 1
+                return html[start:end]
+    return None
+
+
+def _decode_escaped_json(raw: str) -> str:
+    """Decode Instagram's escaped JSON format.
+
+    Handles:
+    - \\\" -> \"
+    - \\\\ -> \\
+    - \\/ -> /
+    - \\uXXXX -> unicode char
+    """
+    # First pass: common patterns
+    raw = raw.replace('\\\\"', '\\"')  # \\\" -> \"
+    raw = raw.replace('\\"', '"')  # \" -> "
+    raw = raw.replace("\\/", "/")  # \/ -> /
+    raw = raw.replace("\\\\", "\\")  # \\ -> \
+
+    with contextlib.suppress(UnicodeEncodeError, UnicodeDecodeError):
+        raw = raw.encode("utf-8").decode("unicode_escape")
+
+    return raw
+
+
+def _get_carousel_urls(decoded_json: str) -> list[str]:
+    """Parse decoded JSON and extract all display_url values from carousel edges."""
+    try:
+        data = json.loads(decoded_json)
+    except json.JSONDecodeError:
         return []
 
-    # Deduplicate by file ID, keeping first occurrence URL
-    post_images: list[str] = []
-    seen_fids: set[str] = set()
+    # The JSON might be the edges array or contain edges
+    edges = None
+    if isinstance(data, dict):
+        edges = data.get("edges")
+    if not edges and isinstance(data, list):
+        edges = data
 
-    for img in all_imgs:
-        # Skip profile/avatar pictures (CDN path has /v/t51.82787-19/)
-        if "/v/t51.82787-19/" in img:
+    if not edges:
+        return []
+
+    urls: list[str] = []
+    for edge in edges:
+        if not isinstance(edge, dict):
             continue
-        fid = _file_id_from_url(img)
-        if fid and fid not in seen_fids:
-            seen_fids.add(fid)
-            # Clean up URL: get just the src (not srcset size descriptors)
-            url = img.split("  ")[0].strip().rstrip(",")
-            # Unescape HTML entities (&amp; -> &)
-            url = url.replace("&amp;", "&")
-            post_images.append(url)
-
-    return post_images
+        node = edge.get("node", {})
+        if not isinstance(node, dict):
+            continue
+        url = node.get("display_url", "")
+        if url and isinstance(url, str):
+            # Clean up the URL
+            url = url.replace("\\/", "/").replace("\\u0026", "&")
+            urls.append(url)
+    return urls
 
 
 def _fetch_embed_page(url: str) -> str:
